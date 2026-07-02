@@ -1,0 +1,42 @@
+# WordPress
+wp-config.php
+wp-content/
+wp-includes/
+index.php
+wp-*.php
+*.log
+
+# Node modules
+node_modules/
+package-lock.json
+yarn.lock
+
+# Dependencies
+vendor/
+composer.lock
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build files
+/dist/
+/build/
+*.zip
+
+# OS
+._*
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+*~
