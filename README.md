@@ -247,12 +247,10 @@ We welcome contributions! Please follow these guidelines:
 For issues, questions, or suggestions:
 
 - **GitHub Issues:** [Create an issue](https://github.com/summitbhc/event-controller/issues)
-- **Email:** support@summitbhc.com
-- **Website:** [https://summitbhc.com](https://summitbhc.com)
 
 ## Security
 
-If you discover a security vulnerability, please email security@summitbhc.com instead of using the issue tracker.
+If you discover a security vulnerability, please email darickquinto@gmail.com instead of using the issue tracker.
 
 ## License
 
@@ -262,7 +260,6 @@ See [LICENSE.txt](LICENSE.txt) for more details.
 
 ## Authors
 
-- **SBHC** - Initial development
-- **Summit BHC** - Ongoing maintenance
+- Darick L. Quinto
 
 ---
