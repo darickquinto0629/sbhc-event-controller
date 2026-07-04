@@ -39,6 +39,20 @@ All notable changes to Event Controller will be documented in this file.
 - Fixed parse error in event-controller-form-script.php (unmatched braces)
 - Fixed error reporting: "summit_bhc_staging: Server returned status 201" now passes validation
 
+### Improved
+
+- **Code Quality & Maintainability** (`public/partials/event-controller-form-script.php`)
+  - Extracted 9 helper functions to eliminate code duplication
+  - Reduced main submit handler from 163 to 67 lines (60% reduction)
+  - Extracted `initDatePicker()` to consolidate daterangepicker initialization
+  - Extracted `initTinyMCEEditor()` to consolidate TinyMCE initialization
+  - Extracted `setupCheckboxToggle()` to eliminate duplicate toggle patterns
+  - Extracted `validateRequiredFields()`, `collectObjectives()`, `collectEventData()`, `collectSelectedSites()` for cleaner data collection
+  - Extracted `resetForm()` for post-submission form reset logic
+  - Extracted `handleSubmissionSuccess()` and `handleSubmissionError()` for AJAX callback handlers
+  - **All behavior preserved** - 100% functionality identical to previous version
+  - Improved readability without any breaking changes
+
 ### Security Improvements
 
 - **Critical**: Moved ACF site credentials handling to server-side only
