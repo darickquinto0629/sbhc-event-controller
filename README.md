@@ -2,7 +2,7 @@
 
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue)
-![Version](https://img.shields.io/badge/version-1.0.1-brightgreen)
+![Version](https://img.shields.io/badge/version-1.0.2-brightgreen)
 
 Centralize event management and syndicate events to multiple remote WordPress sites in real-time with a single form submission.
 
@@ -121,6 +121,44 @@ The form will only display for administrators.
 
 ## API Integration
 
+### Architecture
+
+Event Controller uses a secure client-server architecture:
+
+**Frontend Component** (`public/partials/event-controller-form-script.php`)
+
+- Handles form UI and client-side validation
+- Submits form data via AJAX to the server
+- Never exposes sensitive credentials or site details
+
+**Backend Component** (`includes/class-event-controller-form-handler.php`)
+
+- Processes AJAX requests with nonce verification
+- Retrieves site credentials securely from ACF
+- Manages multi-site event distribution
+- Authenticates to remote sites via Basic Auth (application passwords)
+
+### Security Features
+
+✅ **Credential Protection**
+
+- Site URLs, usernames, and application passwords are never exposed in client-side JavaScript
+- All sensitive data retrieved and managed server-side only
+- Credentials never appear in browser dev tools or page source
+
+✅ **Authentication & Verification**
+
+- WordPress nonce verification on all AJAX endpoints
+- Basic authentication for inter-site REST API calls
+- Application password support for remote site access
+
+✅ **Data Validation**
+
+- Client-side validation for user experience
+- Server-side validation for security
+- HTTPS URL validation and SSL certificate verification
+- Input sanitization on all form fields
+
 The plugin communicates with remote WordPress sites using the REST API and Application Passwords for secure authentication.
 
 ### Event Data Format
@@ -151,6 +189,40 @@ Events are submitted with the following data structure:
 ```
 
 ## Changelog
+
+### Version 1.0.2 - July 4, 2026
+
+**Added**
+
+- New Frontend Form Script (`public/partials/event-controller-form-script.php`)
+  - Complete JavaScript form handling with validation
+  - Date/time range picker integration
+  - TinyMCE editor for event descriptions
+  - Dynamic objective field management
+  - Real-time form validation and error display
+
+- New Backend Form Handler (`includes/class-event-controller-form-handler.php`)
+  - Dedicated AJAX endpoint for secure form submission
+  - Multi-site event distribution capability
+  - Remote media upload functionality
+  - Remote event posting via custom REST endpoints
+
+**Changed**
+
+- Improved HTTP status code handling to accept both 200 (OK) and 201 (Created) responses from remote APIs
+- Enhanced security architecture with server-side credential management
+
+**Fixed**
+
+- Fixed form script parsing errors
+- Fixed "Server returned status 201" errors on successful remote POST requests
+- Improved code formatting and structure
+
+**Security Improvements**
+
+- ⚠️ **Critical**: Refactored credential management to server-side only
+  - Site credentials no longer exposed in client-side JavaScript
+  - All authentication handled securely via AJAX with nonce verification
 
 ### Version 1.0.1 - July 2, 2026
 

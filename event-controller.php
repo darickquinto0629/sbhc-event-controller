@@ -14,9 +14,9 @@
  *
  * @wordpress-plugin
  * Plugin Name:       Event Controller
- * Plugin URI:        https://github.com/summitbhc/event-controller
- * Description:       Centralize event management and syndicate events to multiple remote WordPress sites in real-time with a single form submission.
- * Version:           1.0.1
+ * Plugin URI:        https://https://summitbhc.com/
+ * Description:       This plugin manages and controls event dispatching to remote event client endpoints.
+ * Version:           1.0.0
  * Author:            SBHC
  * Author URI:        https://https://summitbhc.com//
  * License:           GPL-2.0+
@@ -35,7 +35,7 @@ if ( ! defined( 'WPINC' ) ) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'EVENT_CONTROLLER_VERSION', '1.0.1' );
+define( 'EVENT_CONTROLLER_VERSION', '1.0.0' );
 
 /**
  * The code that runs during plugin activation.
@@ -63,6 +63,11 @@ register_deactivation_hook( __FILE__, 'deactivate_event_controller' );
  * admin-specific hooks, and public-facing site hooks.
  */
 require plugin_dir_path( __FILE__ ) . 'includes/class-event-controller.php';
+
+/**
+ * Form submission handler
+ */
+require plugin_dir_path( __FILE__ ) . 'includes/class-event-controller-form-handler.php';
 
 /**
  * Begins execution of the plugin.

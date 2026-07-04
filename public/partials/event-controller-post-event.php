@@ -35,7 +35,6 @@ class Event_Controller_Form {
         // This is the tiny mce api key from darickquinto@gmail.com. this should have to be replaced before production.
         //wp_register_script('wysiwyg', 'https://cdn.tiny.cloud/1/2gsxlj7p8c0istuycljhrr5v0vkef00u9iigmksvo3uiqfm5/tinymce/7/tinymce.min.js', array(), '', true);
 		wp_register_script( 'wysiwyg', 'https://cdn.tiny.cloud/1/exwkwqhfq45kt6ljbutjnd6hvf3vpgbq574lh980b83d7n3a/tinymce/7/tinymce.min.js', array(), '7', true );
-		wp_register_script( 'event-controller', get_bloginfo( 'stylesheet_directory' ) . '/js/event-controller.js', array( 'jquery' ), '', true );
 	}
 
 	/**

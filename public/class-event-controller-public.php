@@ -65,6 +65,10 @@ class Event_Controller_Public {
 
 		// Send Events to client sites
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/partials/event-controller-post-event.php';	
+
+		// Send Events to client sites
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/partials/event-controller-form-script.php';	
+
 	}
 
 	/**
@@ -110,6 +114,16 @@ class Event_Controller_Public {
 		 */
 
 		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/event-controller-public.js', array( 'jquery' ), $this->version, false );
+
+		// Localize script data
+		wp_localize_script(
+			$this->plugin_name,
+			'eventControllerData',
+			array(
+				'ajax_url' => admin_url( 'admin-ajax.php' ),
+				'nonce'    => wp_create_nonce( 'event_controller_submit' ),
+			)
+		);
 
 	}
 
