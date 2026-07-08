@@ -90,18 +90,7 @@ class Event_Controller_Form {
 		        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 		      </div>
 		      <div class="modal-body">
-				<div class="text-center mb-3 loader"></div>
-		<?php
-			if ( have_rows( 'site_details', 'option' ) ) :
-				while ( have_rows( 'site_details', 'option' ) ) :
-					the_row();
-					$name = get_sub_field( 'site_name' );
-		?>
-				<p class="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?> success-message"><?php echo esc_html( $name ); ?> <span></span></p>
-		<?php
-				endwhile;
-			endif;
-		?>
+				    <div class="text-center mb-3 loader"></div>
 		      </div>
 		    </div>
 		  </div>

@@ -151,21 +151,25 @@ let uploadErrors = []; // Reset error array globally
         
         // Show successes
         if (hasSuccesses) {
-          modalBody.append('<div class="mt-3"><strong>✓ Successful Sites:</strong><ul>');
+          let successHTML = '<div class="mt-3 ps-3"><strong>✓ Successful Sites:</strong><ul>';
           result.data.responses.forEach((resp, idx) => {
+            // Use site_name from response metadata (now included by backend)
             const siteName = resp.site_name || `Site ${idx + 1}`;
-            modalBody.append(`<li class="text-success">${siteName}</li>`);
+            const postId = resp.response?.data?.id ? ` (Post ID: ${resp.response.data.id})` : '';
+            successHTML += `<li class="text-success">${siteName}${postId}</li>`;
           });
-          modalBody.append('</ul></div>');
+          successHTML += '</ul></div>';
+          modalBody.append(successHTML);
         }
         
         // Show errors
         if (hasErrors) {
-          modalBody.append('<div class="mt-3"><strong>✗ Failed Sites:</strong><ul>');
+          let errorHTML = '<div class="mt-3 ps-3"><strong>✗ Failed Sites:</strong><ul>';
           result.data.errors.forEach(err => {
-            modalBody.append(`<li class="text-danger">${err}</li>`);
+            errorHTML += `<li class="text-danger">${err}</li>`;
           });
-          modalBody.append('</ul></div>');
+          errorHTML += '</ul></div>';
+          modalBody.append(errorHTML);
         }
       } else if (!result.success && hasErrors) {
         // All sites failed or general error - existing behavior (backward compatible)

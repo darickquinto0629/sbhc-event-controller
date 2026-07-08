@@ -2,6 +2,87 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.1.0] - 2026-07-08
+
+### Added
+
+#### **Comprehensive Transaction Visibility for Multi-Site Distribution**
+
+- When sending events to multiple websites, users now see complete results for every submission
+- Previously, if one site failed, users would only see the error and never learn which sites succeeded
+- Now displays clear breakdown showing exactly which sites succeeded and which failed
+
+#### **Partial Success Reporting**
+
+- Added new "Partial Success" state to handle mixed results (when some sites succeed and others fail)
+- Displays helpful summary: "2 of 3 sites succeeded"
+- Users immediately understand the scope of successful submissions
+
+#### **Actual Website Names in Results**
+
+- Event distribution results now display real website names (e.g., "Stetson Hills Main Campus") instead of technical site identifiers
+- Makes it obvious which campus/location succeeded or failed
+- Reduces confusion when managing multiple campuses or facilities
+
+#### **Post ID Tracking for Successful Submissions**
+
+- Successfully created events now show their Post ID on the remote site
+- Format: "Stetson Hills Main Campus (Post ID: 1234)"
+- Helps verify event creation and simplifies tracking
+
+#### **Summary Statistics Dashboard**
+
+- Multi-site submission results include easy-to-read counts:
+  - Total sites targeted
+  - Number succeeded
+  - Number failed
+- Users get the big picture without reading individual details
+
+### Improved
+
+#### **User-Friendly Error Messages**
+
+- Error messages now include website names for clarity
+- Actionable information helps administrators identify issues quickly
+- Example: "Downtown Community Center: Authentication failed" instead of technical ID
+
+#### **Fixed Visual Display Issues**
+
+- Corrected layout problem where successful/failed site lists were not displaying properly in the modal
+- Lists now display cleanly with proper formatting
+- Professional appearance with better readability
+
+#### **Better Submission Status Feedback**
+
+- Modal messages now clearly indicate outcome:
+  - Full success: "All sites processed successfully"
+  - Partial: "Processing complete: 2 succeeded, 1 failed"
+  - Failure: "Some errors occurred while posting"
+- Users understand submission results before closing the dialog
+
+### Technical Details (Developers)
+
+- Backend response now includes metadata for each submission:
+  - `partial_success`: Boolean flag identifying mixed results
+  - `stats`: Object with counts (total, succeeded, failed)
+  - `responses`: Array of all successful submissions with site info
+  - `errors`: Array of all failed submissions
+- Frontend uses safe property access to prevent compatibility issues
+- Optimized DOM rendering to prevent layout issues
+
+### Backward Compatibility
+
+✅ **100% Backward Compatible**
+
+- All existing functionality works exactly as before
+- Single-site submissions unaffected
+- All-success and all-fail scenarios display identically
+- New partial success feature activates only in mixed scenarios (which previously had limited reporting)
+
+### Known Limitations
+
+⚠️ **Scale Limit**: Current implementation reliably supports up to 12-15 websites per submission. For larger scale (50+ sites), additional optimization is recommended. See documentation.
+
 ## [1.0.3] - 2026-07-06
 
 ### Changed

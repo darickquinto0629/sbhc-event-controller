@@ -70,11 +70,10 @@ class Event_Controller_Form_Handler {
 			$credentials = $this->get_site_credentials_by_id( $site_id );
 			if ( ! $credentials ) {
 				error_log('EVENT_CONTROLLER: Credentials not found for site: ' . $site_id);
-				$errors[] = "Site '$site_id' not found in configuration";
+				// Site ID not found - use sanitized ID as fallback
+				$errors[] = "Site configuration not found for: " . ucwords( str_replace( '_', ' ', $site_id ) );
 				continue;
 			}
-
-			error_log('EVENT_CONTROLLER: Credentials found for site: ' . $site_id);
 
 			// Upload media if file exists
 			$media_id = null;
@@ -83,7 +82,8 @@ class Event_Controller_Form_Handler {
 				$media_id = $this->upload_media_to_remote( $credentials, $file );
 				if ( is_wp_error( $media_id ) ) {
 					error_log('EVENT_CONTROLLER: Media upload failed for ' . $site_id . ': ' . $media_id->get_error_message());
-					$errors[] = "$site_id: " . $media_id->get_error_message();
+					// Include site name in error for better UX
+					$errors[] = $credentials['name'] . ": " . $media_id->get_error_message();
 					continue;
 				}
 				error_log('EVENT_CONTROLLER: Media uploaded successfully for site: ' . $site_id . ', ID: ' . $media_id);
@@ -99,10 +99,16 @@ class Event_Controller_Form_Handler {
 			$result = $this->post_event_to_remote( $credentials, $event_data );
 			if ( is_wp_error( $result ) ) {
 				error_log('EVENT_CONTROLLER: Event post failed for ' . $site_id . ': ' . $result->get_error_message());
-				$errors[] = "$site_id: " . $result->get_error_message();
+				// Include site name in error for better UX
+				$errors[] = $credentials['name'] . ": " . $result->get_error_message();
 			} else {
 				error_log('EVENT_CONTROLLER: Event posted successfully to site: ' . $site_id);
-				$all_responses[] = $result;  // Store the response with empty_fields
+				// Wrap response with site metadata for frontend display
+				$all_responses[] = array(
+					'site_id' => $site_id,
+					'site_name' => $credentials['name'],
+					'response' => $result
+				);
 			}
 		}
 
