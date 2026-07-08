@@ -106,16 +106,34 @@ class Event_Controller_Form_Handler {
 			}
 		}
 
-		if ( ! empty( $errors ) ) {
-			error_log('EVENT_CONTROLLER: Submission completed with errors: ' . json_encode($errors));
+		// Calculate success/failure counts
+		$total_sites = count( $selected_sites );
+		$succeeded_count = count( $all_responses );
+		$failed_count = count( $errors );
+
+		if ( $failed_count === $total_sites ) {
+			// All sites failed - use existing error response (backward compatible)
+			error_log('EVENT_CONTROLLER: Submission completed with all sites failed: ' . json_encode($errors));
 			wp_send_json_error( array( 'errors' => $errors ) );
 		}
 
-		error_log('EVENT_CONTROLLER: Submission completed successfully');
-		// Pass through responses with empty_fields diagnostics from event-client
+		// Partial success or all success - use success response with all data (backward compatible)
+		$is_partial = $failed_count > 0 && $succeeded_count > 0;
+		$message = $succeeded_count === $total_sites 
+			? 'All events posted successfully'
+			: "Partial success: $succeeded_count of $total_sites sites succeeded";
+
+		error_log('EVENT_CONTROLLER: Submission completed - ' . $message);
 		wp_send_json_success( array( 
-			'message' => 'All events posted successfully',
-			'responses' => $all_responses
+			'message' => $message,
+			'responses' => $all_responses,
+			'errors' => $errors,
+			'partial_success' => $is_partial,
+			'stats' => array(
+				'total' => $total_sites,
+				'succeeded' => $succeeded_count,
+				'failed' => $failed_count
+			)
 		) );
 	}
 

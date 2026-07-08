@@ -119,28 +119,67 @@ let uploadErrors = []; // Reset error array globally
     function handleSubmissionSuccess(response) {
       const result = typeof response === 'string' ? JSON.parse(response) : response;
       const modalBody = $('#sendingData .modal-body');
-		
-		console.log(result.data.errors[0]);
       
       $('.loader').hide(500);
       $('#submit_event').removeAttr('disabled');
 
-      if (result.success) {
-		$('.success-message').addClass('succeed');
-		$('.success-message span').html('- Success!');  
+      // Check for partial success (new feature - backward compatible)
+      const isPartialSuccess = result.data?.partial_success === true;
+      const hasErrors = result.data?.errors && result.data.errors.length > 0;
+      const hasSuccesses = result.data?.responses && result.data.responses.length > 0;
+      const stats = result.data?.stats || {};
+
+      if (result.success && !hasErrors) {
+        // All sites succeeded - existing behavior (backward compatible)
+        $('.success-message').addClass('succeed');
+        $('.success-message span').html('- Success!');  
         $('#post_event_status').text("All sites processed successfully.");
         modalBody.append('<div class="alert alert-success mt-3">All events posted successfully.</div>');
         resetForm();
-      } else {
-		$('.success-message').addClass('failed');
-		$('.success-message span').html('- Error!');  		  
-        $('#post_event_status').text("Some errors occurred while posting:");
-        if (result.errors && result.errors.length > 0) {
-          modalBody.append('<div class="alert alert-danger mt-3"><strong>Errors:</strong><ul>' +
-            result.errors.map(err => `<li>${err}</li>`).join('') + '</ul></div>');
-        } else {
-          modalBody.append('<div class="alert alert-danger mt-3">An error occurred during processing.</div>');
+      } else if (result.success && isPartialSuccess) {
+        // NEW: Partial success - some succeeded, some failed
+        $('.success-message').addClass('partial');
+        $('.success-message span').html('- Partial Success!');  
+        $('#post_event_status').text(`Processing complete: ${stats.succeeded} succeeded, ${stats.failed} failed`);
+        
+        // Show summary stats
+        modalBody.append(`
+            <div class="alert alert-warning mt-3">
+                <strong>Summary:</strong> ${stats.succeeded} of ${stats.total} sites succeeded
+            </div>
+        `);
+        
+        // Show successes
+        if (hasSuccesses) {
+          modalBody.append('<div class="mt-3"><strong>✓ Successful Sites:</strong><ul>');
+          result.data.responses.forEach((resp, idx) => {
+            const siteName = resp.site_name || `Site ${idx + 1}`;
+            modalBody.append(`<li class="text-success">${siteName}</li>`);
+          });
+          modalBody.append('</ul></div>');
         }
+        
+        // Show errors
+        if (hasErrors) {
+          modalBody.append('<div class="mt-3"><strong>✗ Failed Sites:</strong><ul>');
+          result.data.errors.forEach(err => {
+            modalBody.append(`<li class="text-danger">${err}</li>`);
+          });
+          modalBody.append('</ul></div>');
+        }
+      } else if (!result.success && hasErrors) {
+        // All sites failed or general error - existing behavior (backward compatible)
+        $('.success-message').addClass('failed');
+        $('.success-message span').html('- Error!');  		  
+        $('#post_event_status').text("Some errors occurred while posting:");
+        modalBody.append('<div class="alert alert-danger mt-3"><strong>Errors:</strong><ul>' +
+          result.data.errors.map(err => `<li>${err}</li>`).join('') + '</ul></div>');
+      } else {
+        // Fallback for unexpected response format
+        $('.success-message').addClass('failed');
+        $('.success-message span').html('- Error!');  
+        $('#post_event_status').text("An error occurred during processing");
+        modalBody.append('<div class="alert alert-danger mt-3">An unexpected error occurred during processing.</div>');
       }
     }
 
