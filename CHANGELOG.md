@@ -2,6 +2,24 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.0.3] - 2026-07-06
+
+### Changed
+
+- Improved remote API error handling for media uploads and event creation.
+- Added user-friendly error messages for common connection and HTTP failures.
+- Enhanced frontend diagnostics by returning detailed responses from remote client sites.
+
+### Fixed
+
+- Improved reporting of authentication, permission, timeout, SSL, DNS, and server errors.
+- Better distinction between connection failures and HTTP response errors.
+
+### Compatibility
+
+- Maintained backward compatibility with the existing response format.
+- Added an optional `responses` field to successful API responses for diagnostics.
+
 ## [1.0.2] - 2026-07-04
 
 ### Added
