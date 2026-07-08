@@ -81,41 +81,7 @@ class Event_Controller_Form {
 		<form id="ec-form" class="row g-3 mt-3">
 
 		<!-- Modal -->
-		<div class="modal fade" id="selectSite" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
-		  <div class="modal-dialog modal-lg modal-dialog-centered">
-		    <div class="modal-content">
-		      <div class="modal-header">
-		        <h3 class="modal-title fs-5" id="staticBackdropLabel">Select Website</h3>
-		        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-		      </div>
-		      <div class="modal-body">
-				<div class="col-md-6">
-		<?php
-			if ( have_rows( 'site_details', 'option' ) ) :
-				while ( have_rows( 'site_details', 'option' ) ) :
-					the_row();
-					$name = get_sub_field( 'site_name' );
-		?>
-					<div class="form-check">
-					  <input class="form-check-input" type="checkbox" value="" id="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?>">
-					  <label class="form-check-label" for="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?>">
-						<?php echo esc_html( $name ); ?>
-					  </label>
-					</div>
-		<?php
-				endwhile;
-			endif;
-		?>
-				</div>
-		      </div>
-		      <div class="modal-footer">
-		        <button type="button" class="btn btn-primary">Clear All Selection</button><button type="button" class="btn btn-danger" data-bs-dismiss="modal" aria-label="Close">Close</button>
-		      </div>
-		    </div>
-		  </div>
-		</div>
-
-		<!-- Modal -->
+			
 		<div class="modal fade" id="sendingData" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="sendingData" aria-hidden="true">
 		  <div class="modal-dialog modal-lg modal-dialog-centered">
 		    <div class="modal-content">
@@ -131,7 +97,7 @@ class Event_Controller_Form {
 					the_row();
 					$name = get_sub_field( 'site_name' );
 		?>
-				<p class="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?> success"><?php echo esc_html( $name ); ?> <span style="display: none; color: green;">- Success!</span></p>
+				<p class="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?> success-message"><?php echo esc_html( $name ); ?> <span></span></p>
 		<?php
 				endwhile;
 			endif;
@@ -141,9 +107,7 @@ class Event_Controller_Form {
 		  </div>
 		</div>
 
-		<div class="col-md-12 d-grid">
-			<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#selectSite">Select Site</button>
-		</div>
+
 	<div class="col-md-12 mb-3">
 	  <label for="featuredImage" class="form-label">Set Featured Image</label>
 	  <input class="form-control" type="file" id="featured_image" name="async-upload">
@@ -499,7 +463,29 @@ class Event_Controller_Form {
 			</div>	
 		</div>
 	</div>
-	
+			
+	<div class="col-md-12 mb-5">
+		<div class="row">
+			<div class="col-mb-12">
+				<?php
+					if ( have_rows( 'site_details', 'option' ) ) :
+						while ( have_rows( 'site_details', 'option' ) ) :
+							the_row();
+							$name = get_sub_field( 'site_name' );
+				?>
+							<div class="form-check">
+							  <input class="form-check-input" type="checkbox" value="" id="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?>">
+							  <label class="form-check-label" for="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?>">
+								<?php echo esc_html( $name ); ?>
+							  </label>
+							</div>
+				<?php
+						endwhile;
+					endif;
+				?>					
+			</div>	
+		</div>	
+	</div>		
 	
   <div class="col-auto">
     <button id="submit_event" type="submit" class="btn btn-primary mb-3">Post Event</button>

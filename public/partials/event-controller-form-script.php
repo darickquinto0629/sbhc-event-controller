@@ -119,15 +119,21 @@ let uploadErrors = []; // Reset error array globally
     function handleSubmissionSuccess(response) {
       const result = typeof response === 'string' ? JSON.parse(response) : response;
       const modalBody = $('#sendingData .modal-body');
+		
+		console.log(result.data.errors[0]);
       
       $('.loader').hide(500);
       $('#submit_event').removeAttr('disabled');
 
       if (result.success) {
+		$('.success-message').addClass('succeed');
+		$('.success-message span').html('- Success!');  
         $('#post_event_status').text("All sites processed successfully.");
         modalBody.append('<div class="alert alert-success mt-3">All events posted successfully.</div>');
         resetForm();
       } else {
+		$('.success-message').addClass('failed');
+		$('.success-message span').html('- Error!');  		  
         $('#post_event_status').text("Some errors occurred while posting:");
         if (result.errors && result.errors.length > 0) {
           modalBody.append('<div class="alert alert-danger mt-3"><strong>Errors:</strong><ul>' +

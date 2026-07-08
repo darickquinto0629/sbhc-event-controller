@@ -226,7 +226,7 @@ class Event_Controller_Form_Handler {
 			$http_errors = array(
 				'401' => 'Authentication failed - check application username and password',
 				'403' => 'Access denied - user does not have permission to upload files',
-				'404' => 'Remote media upload endpoint not found - check site URL configuration',
+				'404' => 'Remote media upload endpoint not found - check if event plugin is installed to the event client site',
 				'413' => 'File is too large - reduce file size',
 				'500' => 'Server error on remote site - check event client error logs',
 				'503' => 'Remote site service unavailable - try again later',
@@ -319,7 +319,7 @@ class Event_Controller_Form_Handler {
 			$http_errors = array(
 				'401' => 'Authentication failed - check application username and password',
 				'403' => 'Access denied - user does not have permission to create events',
-				'404' => 'Remote event creation endpoint not found - check site URL configuration',
+				'404' => 'Remote event creation endpoint not found - check if event plugin is installed to the event client site',
 				'500' => 'Server error on remote site - check event client error logs',
 				'503' => 'Remote site service unavailable - try again later',
 			);
