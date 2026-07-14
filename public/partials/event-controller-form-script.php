@@ -12,13 +12,65 @@ let uploadErrors = []; // Reset error array globally
     let startdate = moment().format('YYYY-MM-DD');
     let enddate = moment().format('YYYY-MM-DD');
 
+    // Helper: Generate time options dynamically (24 hours, 15-minute intervals)
+    function generateTimeOptions(intervalMinutes = 15) {
+      const options = [];
+      for (let hour = 0; hour < 24; hour++) {
+        for (let minute = 0; minute < 60; minute += intervalMinutes) {
+          const timeStr = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
+          const ampm = hour < 12 ? 'AM' : 'PM';
+          const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+          const displayTime = displayHour + ':' + String(minute).padStart(2, '0') + ' ' + ampm;
+          options.push({ value: timeStr, display: displayTime });
+        }
+      }
+      return options;
+    }
+
+    // Helper: Populate time select with generated options
+    function populateTimeSelect(selectSelector, intervalMinutes = 15) {
+      const timeOptions = generateTimeOptions(intervalMinutes);
+      const $select = $(selectSelector);
+      $select.empty();
+      timeOptions.forEach(opt => {
+        $select.append(`<option value="${opt.value}">${opt.display}</option>`);
+      });
+    }
+
+    // Initialize time selects on page load
+    populateTimeSelect('select[name="starttime"]');
+    populateTimeSelect('select[name="endtime"]');
+
+    // Auto-update end time when start time changes (+1 hour)
+    $('select[name="starttime"]').on('change', function() {
+      const selectedTime = $(this).val();
+      if (!selectedTime) return;
+      
+      // Parse the start time (format: HH:MM:00)
+      const [hours, minutes] = selectedTime.split(':');
+      let endHour = parseInt(hours) + 1;
+      const endMinute = minutes;
+      
+      // Handle day rollover (23:xx -> 00:xx)
+      if (endHour >= 24) {
+        endHour = 0;
+      }
+      
+      // Format the end time
+      const endTime = String(endHour).padStart(2, '0') + ':' + endMinute + ':00';
+      
+      // Set the end time select
+      $('select[name="endtime"]').val(endTime);
+    });
+
     // Helper: Initialize date picker with callback
     function initDatePicker(inputSelector, onDateSelected) {
       $(inputSelector).daterangepicker({
         minDate: moment(),
-        timePicker: true,
+        timePicker: false,
         singleDatePicker: true,
         startDate: moment(),
+        autoApply: true
       }, onDateSelected);
     }
 
@@ -130,11 +182,31 @@ let uploadErrors = []; // Reset error array globally
       const stats = result.data?.stats || {};
 
       if (result.success && !hasErrors) {
-        // All sites succeeded - existing behavior (backward compatible)
+        // All sites succeeded - show detailed list like partial success
         $('.success-message').addClass('succeed');
         $('.success-message span').html('- Success!');  
-        $('#post_event_status').text("All sites processed successfully.");
-        modalBody.append('<div class="alert alert-success mt-3">All events posted successfully.</div>');
+        $('#post_event_status').text(`All ${stats.total} sites processed successfully.`);
+        
+        // Show summary stats
+        modalBody.append(`
+            <div class="alert alert-success mt-3">
+                <strong>Summary:</strong> All ${stats.total} sites succeeded
+            </div>
+        `);
+        
+        // Show successes
+        if (hasSuccesses) {
+          let successHTML = '<div class="mt-3 ps-3"><strong>✓ Successful Sites:</strong><ul>';
+          result.data.responses.forEach((resp, idx) => {
+            // Use site_name from response metadata (now included by backend)
+            const siteName = resp.site_name || `Site ${idx + 1}`;
+            const postId = resp.response?.data?.id ? ` (Post ID: ${resp.response.data.id})` : '';
+            successHTML += `<li class="text-success">${siteName}${postId}</li>`;
+          });
+          successHTML += '</ul></div>';
+          modalBody.append(successHTML);
+        }
+        
         resetForm();
       } else if (result.success && isPartialSuccess) {
         // NEW: Partial success - some succeeded, some failed
@@ -250,8 +322,8 @@ let uploadErrors = []; // Reset error array globally
 
       // Ensure at least one site is selected
       if (selectedSites.length === 0) {
-        $('#show-form-errors').append('<div class="alert alert-danger mt-3">No website selected to create event.</div>');
-        window.scrollTo(0, 0);
+        $('#show-form-errors').append('<div class="alert alert-danger mt-3">Please select at least one website before posting the event.</div>');
+        $('#show-form-errors')[0].scrollIntoView({ behavior: 'smooth' });
         return;
       }
 

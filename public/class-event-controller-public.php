@@ -66,7 +66,7 @@ class Event_Controller_Public {
 		// Send Events to client sites
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/partials/event-controller-post-event.php';	
 
-		// Send Events to client sites
+		// Event Controller JS Script
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/partials/event-controller-form-script.php';	
 
 	}

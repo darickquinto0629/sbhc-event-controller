@@ -2,6 +2,40 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.1.1] - 2026-07-15
+
+### Added
+
+#### **Auto-Update End Time on Start Time Selection**
+
+- When users select a start time, the end time now automatically updates to exactly +1 hour
+- Handles day rollover seamlessly (e.g., selecting 23:00 start time automatically sets end time to 00:00)
+- Saves users from manual end time selection in common scenarios
+- Improves form completion speed and reduces user errors
+
+### Improved
+
+#### **Optimized Time Picker Generation**
+
+- Replaced 96 hardcoded time options with dynamic JavaScript generation
+- Reduces HTML file size and improves maintainability
+- Time intervals remain configurable (currently 15-minute increments)
+- Faster page load with no loss of functionality
+
+#### **Enhanced Date Selection Experience**
+
+- Date picker now auto-applies selection without requiring users to click "Apply" button
+- Time picker removed from date selection to keep interface focused
+- Streamlines the date input workflow
+
+#### **Consistent Success Reporting Format**
+
+- All success scenarios now display in consistent format with statistics and site details
+- Both "all success" and "partial success" states show total sites processed and individual site Post IDs
+- Improves user confidence in multi-site submissions
+
+---
+
 ## [1.1.0] - 2026-07-08
 
 ### Added
