@@ -2,6 +2,20 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.1.2] - 2026-07-17
+
+### Fixed
+
+#### **Duplicate Event Submissions**
+
+- Resolved issue where rapid clicks on submit button could result in events being posted multiple times
+- Added submission state flag (`isSubmitting`) to prevent concurrent form submissions
+- Flag blocks new submission requests until current request completes (success or error)
+- Ensures only one submission can process at a time regardless of user interaction speed
+- Non-breaking change with no impact on existing functionality
+
+---
+
 ## [1.1.1] - 2026-07-15
 
 ### Added

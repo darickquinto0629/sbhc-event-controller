@@ -33,8 +33,8 @@ class Event_Controller_Form {
 		wp_register_script( 'drp-moment', 'https://cdn.jsdelivr.net/momentjs/latest/moment.min.js', array(), '', true );
 		wp_register_script( 'daterange-picker', 'https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js', array( 'drp-moment' ), '', true );
         // This is the tiny mce api key from darickquinto@gmail.com. this should have to be replaced before production.
-        //wp_register_script('wysiwyg', 'https://cdn.tiny.cloud/1/2gsxlj7p8c0istuycljhrr5v0vkef00u9iigmksvo3uiqfm5/tinymce/7/tinymce.min.js', array(), '', true);
-		wp_register_script( 'wysiwyg', 'https://cdn.tiny.cloud/1/exwkwqhfq45kt6ljbutjnd6hvf3vpgbq574lh980b83d7n3a/tinymce/7/tinymce.min.js', array(), '7', true );
+        wp_register_script('wysiwyg', 'https://cdn.tiny.cloud/1/2gsxlj7p8c0istuycljhrr5v0vkef00u9iigmksvo3uiqfm5/tinymce/7/tinymce.min.js', array(), '', true);
+		//wp_register_script( 'wysiwyg', 'https://cdn.tiny.cloud/1/exwkwqhfq45kt6ljbutjnd6hvf3vpgbq574lh980b83d7n3a/tinymce/7/tinymce.min.js', array(), '7', true );
 	}
 
 	/**

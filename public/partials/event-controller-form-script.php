@@ -7,6 +7,7 @@ function event_submit_js() {
   $(function() {
 
 let uploadErrors = []; // Reset error array globally
+let isSubmitting = false; // Flag to prevent duplicate submissions
 
     // Default start/end values
     let startdate = moment().format('YYYY-MM-DD');
@@ -172,6 +173,7 @@ let uploadErrors = []; // Reset error array globally
       const result = typeof response === 'string' ? JSON.parse(response) : response;
       const modalBody = $('#sendingData .modal-body');
       
+      isSubmitting = false;
       $('.loader').hide(500);
       $('#submit_event').removeAttr('disabled');
 
@@ -263,6 +265,7 @@ let uploadErrors = []; // Reset error array globally
     function handleSubmissionError(xhr, status, error) {
       const modalBody = $('#sendingData .modal-body');
       
+      isSubmitting = false;
       $('.loader').hide(500);
       $('#submit_event').removeAttr('disabled');
       $('#post_event_status').text("Request failed");
@@ -287,6 +290,10 @@ let uploadErrors = []; // Reset error array globally
     $('#submit_event').on('click', function(e) {
       e.preventDefault();
       e.stopImmediatePropagation();
+
+      // Prevent duplicate submissions
+      if (isSubmitting) return;
+      isSubmitting = true;
 
       // Validate required fields
       const requiredFields = [
