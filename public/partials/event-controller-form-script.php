@@ -382,6 +382,12 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
     function initTinyMCEEditor(selector, config = {}) {
       const defaultConfig = {
         selector: selector,
+		  plugins: [
+			  "advlist", "anchor", "autolink", "charmap", "code", "fullscreen",
+			  "help", "image", "insertdatetime", "link", "lists", "media",
+			  "preview", "searchreplace", "table", "visualblocks",
+		  ],
+		  toolbar: "undo redo | styles | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link",	  
         ai_request: (request, respondWith) => respondWith.string(() => Promise.reject("See docs to implement AI Assistant"))
       };
       tinymce.init(Object.assign({}, defaultConfig, config));
