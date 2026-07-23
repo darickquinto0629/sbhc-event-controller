@@ -298,7 +298,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       // Validate required fields
       const requiredFields = [
         'event_title',
-        'eventlocation',
+        // 'eventlocation',
         'startdate',
         'enddate',
         'starttime',

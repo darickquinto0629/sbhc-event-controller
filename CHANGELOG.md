@@ -2,6 +2,17 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.1.3] - 2026-07-23
+
+### Changed
+
+#### **Event Location Field Deferred**
+
+- Temporarily deferred Locations field implementation pending feature evaluation
+- Field has been disabled in form pending further requirements definition
+
+---
+
 ## [1.1.2] - 2026-07-17
 
 ### Fixed

@@ -117,11 +117,13 @@ class Event_Controller_Form {
     <input type="text" name="ticketprice" class="form-control">
   </div>	
 	
+<!-- This will be removed soon. for now just comment it out 
   <div class="col-md-12 mb-3">
     <label for="EventLocation">Event Location</label>
     <input type="text" name="eventlocation" class="form-control" required>
     <div class="invalid-feedback">Please provide a location for the event.</div>
-  </div>	
+  </div>
+-->
 	
   <div class="col-md-6 mb-3" style="display: none">
     <label for="EventType" class="">Event Type</label>
@@ -202,9 +204,8 @@ class Event_Controller_Form {
   <div class="col-md-6 mb-3">
     <label for="event_location_type">Event Location Type</label>
     <select name="event_location_type" class="form-control" required>
-      <option value="Virtual" selected>Online (URL)</option>
+      <option value="Virtual" selected>Virtual</option>
       <option value="Physical">Physical</option>
-      <option value="">None</option>
     </select>
   </div>
 	
