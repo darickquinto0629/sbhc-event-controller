@@ -2,3 +2,89 @@
  * All of the CSS for your public-facing functionality should be
  * included in this file.
  */
+
+/* Site Processing List Styles */
+.sites-processing {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  margin-top: 20px;
+}
+
+.sites-processing h5 {
+  margin-bottom: 15px;
+  color: #333;
+  font-weight: 600;
+}
+
+.site-item {
+  background-color: #ffffff;
+  border: 1px solid #ddd;
+  border-left: 4px solid #0d6efd;
+  transition: all 0.3s ease;
+}
+
+.site-item.site-success {
+  border-left-color: #198754;
+  background-color: #f1f8f5;
+}
+
+.site-item.site-failed {
+  border-left-color: #dc3545;
+  background-color: #fef5f5;
+}
+
+.site-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.site-name {
+  color: #333;
+  font-weight: 500;
+}
+
+.site-status-container {
+  min-width: 200px;
+  text-align: right;
+}
+
+.site-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  animation: fadeIn 0.3s ease;
+}
+
+.site-status {
+  display: none;
+}
+
+.site-success .site-status {
+  display: inline;
+}
+
+.site-failed .site-status {
+  display: inline;
+}
+
+.site-item.site-success .site-loader {
+  display: none;
+}
+
+.site-item.site-failed .site-loader {
+  display: none;
+}
+
+.badge {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

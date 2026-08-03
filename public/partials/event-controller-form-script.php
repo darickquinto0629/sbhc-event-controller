@@ -184,74 +184,76 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       const stats = result.data?.stats || {};
 
       if (result.success && !hasErrors) {
-        // All sites succeeded - show detailed list like partial success
+        // All sites succeeded
         $('.success-message').addClass('succeed');
         $('.success-message span').html('- Success!');  
         $('#post_event_status').text(`All ${stats.total} sites processed successfully.`);
         
-        // Show summary stats
-        modalBody.append(`
-            <div class="alert alert-success mt-3">
-                <strong>Summary:</strong> All ${stats.total} sites succeeded
-            </div>
-        `);
-        
-        // Show successes
+        // Update each site in the list
         if (hasSuccesses) {
-          let successHTML = '<div class="mt-3 ps-3"><strong>✓ Successful Sites:</strong><ul>';
-          result.data.responses.forEach((resp, idx) => {
-            // Use site_name from response metadata (now included by backend)
-            const siteName = resp.site_name || `Site ${idx + 1}`;
-            const postId = resp.response?.data?.id ? ` (Post ID: ${resp.response.data.id})` : '';
-            successHTML += `<li class="text-success">${siteName}${postId}</li>`;
+          result.data.responses.forEach((resp) => {
+            const siteElement = $(`[data-site-id="${resp.site_id}"]`);
+            siteElement.find('.site-loader').hide();
+            siteElement.find('.site-status').html('<span class="badge bg-success">✓ Success</span>');
+            siteElement.addClass('site-success');
           });
-          successHTML += '</ul></div>';
-          modalBody.append(successHTML);
         }
         
         resetForm();
       } else if (result.success && isPartialSuccess) {
-        // NEW: Partial success - some succeeded, some failed
+        // Partial success - some succeeded, some failed
         $('.success-message').addClass('partial');
         $('.success-message span').html('- Partial Success!');  
         $('#post_event_status').text(`Processing complete: ${stats.succeeded} succeeded, ${stats.failed} failed`);
         
-        // Show summary stats
-        modalBody.append(`
-            <div class="alert alert-warning mt-3">
-                <strong>Summary:</strong> ${stats.succeeded} of ${stats.total} sites succeeded
-            </div>
-        `);
-        
-        // Show successes
+        // Update successful sites
         if (hasSuccesses) {
-          let successHTML = '<div class="mt-3 ps-3"><strong>✓ Successful Sites:</strong><ul>';
-          result.data.responses.forEach((resp, idx) => {
-            // Use site_name from response metadata (now included by backend)
-            const siteName = resp.site_name || `Site ${idx + 1}`;
-            const postId = resp.response?.data?.id ? ` (Post ID: ${resp.response.data.id})` : '';
-            successHTML += `<li class="text-success">${siteName}${postId}</li>`;
+          result.data.responses.forEach((resp) => {
+            const siteElement = $(`[data-site-id="${resp.site_id}"]`);
+            siteElement.find('.site-loader').hide();
+            siteElement.find('.site-status').html('<span class="badge bg-success">✓ Success</span>');
+            siteElement.addClass('site-success');
           });
-          successHTML += '</ul></div>';
-          modalBody.append(successHTML);
         }
         
-        // Show errors
+        // Update failed sites with error messages
         if (hasErrors) {
-          let errorHTML = '<div class="mt-3 ps-3"><strong>✗ Failed Sites:</strong><ul>';
           result.data.errors.forEach(err => {
-            errorHTML += `<li class="text-danger">${err}</li>`;
+            // Extract site name from error message (format: "SiteName: error details")
+            const errorParts = err.split(':');
+            const siteName = errorParts[0].trim();
+            const errorMsg = errorParts.slice(1).join(':').trim();
+            
+            // Find matching site element
+            const siteElement = $(`[data-site-name="${siteName}"]`);
+            if (siteElement.length) {
+              siteElement.find('.site-loader').hide();
+              siteElement.find('.site-status').html(`<span class="badge bg-danger" title="${errorMsg}">✗ ${errorMsg.substring(0, 30)}...</span>`);
+              siteElement.addClass('site-failed');
+            }
           });
-          errorHTML += '</ul></div>';
-          modalBody.append(errorHTML);
         }
       } else if (!result.success && hasErrors) {
-        // All sites failed or general error - existing behavior (backward compatible)
+        // All sites failed or general error
         $('.success-message').addClass('failed');
         $('.success-message span').html('- Error!');  		  
         $('#post_event_status').text("Some errors occurred while posting:");
-        modalBody.append('<div class="alert alert-danger mt-3"><strong>Errors:</strong><ul>' +
-          result.data.errors.map(err => `<li>${err}</li>`).join('') + '</ul></div>');
+        
+        // Update all sites to failed status
+        if (hasErrors) {
+          result.data.errors.forEach(err => {
+            const errorParts = err.split(':');
+            const siteName = errorParts[0].trim();
+            const errorMsg = errorParts.slice(1).join(':').trim();
+            
+            const siteElement = $(`[data-site-name="${siteName}"]`);
+            if (siteElement.length) {
+              siteElement.find('.site-loader').hide();
+              siteElement.find('.site-status').html(`<span class="badge bg-danger" title="${errorMsg}">✗ ${errorMsg.substring(0, 30)}...</span>`);
+              siteElement.addClass('site-failed');
+            }
+          });
+        }
       } else {
         // Fallback for unexpected response format
         $('.success-message').addClass('failed');
@@ -334,6 +336,35 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         return;
       }
 
+      // Show loader and submit
+      $('.loader').show();
+      $('.success span').hide();
+      
+      // Build site list with loading icons
+      let sitesHTML = '<div class="sites-processing mt-4"><h5>Processing Sites:</h5><div class="sites-list">';
+      selectedSites.forEach(siteId => {
+        const siteName = $(`#${siteId}`).closest('.form-check').find('label').text().trim();
+        sitesHTML += `
+          <div class="site-item mb-2 p-2 border rounded" data-site-id="${siteId}" data-site-name="${siteName}">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="site-name"><strong>${siteName}</strong></span>
+              <div class="site-status-container">
+                <span class="site-loader">
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  <span class="badge bg-info">Processing...</span>
+                </span>
+                <span class="site-status"></span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      sitesHTML += '</div></div>';
+      
+      $('#sendingData .modal-body').html(sitesHTML);
+      $('#sendingData').modal('show');
+      $('#submit_event').prop('disabled', true);
+
       // Prepare FormData for submission
       const formData = new FormData();
       formData.append('action', 'event_controller_submit_event');
@@ -343,12 +374,6 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       if (file) {
         formData.append('file', file);
       }
-
-      // Show loader and submit
-      $('.loader').show();
-      $('.success span').hide();
-      $('#sendingData').modal('show');
-      $('#submit_event').prop('disabled', true);
 
       $.ajax({
         url: eventControllerData.ajax_url,

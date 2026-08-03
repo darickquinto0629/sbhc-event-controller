@@ -2,6 +2,49 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.2.0] - 2026-08-04
+
+### Added
+
+#### **Parallel Media Upload & Event Post Processing**
+
+- Implemented cURL multi-handle parallel processing for multi-site submissions
+- Media uploads now occur simultaneously across all target sites instead of sequentially
+- Event posts now occur in parallel after media uploads complete
+- Significantly improves performance when distributing events to multiple sites
+- Falls back to sequential processing if cURL multi is unavailable
+
+#### **Per-Site Media ID Tracking**
+
+- Media upload IDs are now tracked individually per remote site
+- Each site receives its correct associated media ID for featured image
+- Prevents media ID mismatches in multi-site deployments
+
+#### **Events Manager API Schema Transformation**
+
+- New `transform_to_em_api_schema()` method converts form data to Events Manager API format
+- Maps ACF custom fields to Events Manager API field names
+- Supports full event data structure including location, dates, times, presenter info, ticket pricing
+- Enables seamless integration with Events Manager plugin on remote sites
+
+### Changed
+
+#### **API Endpoint Migration to Events Manager**
+
+- Updated media upload endpoint from `/wp-json/sbhc/v2/media_upload` to `/wp-json/events-manager/v1/media`
+- Switched API integration from custom SBHC endpoint to standard Events Manager plugin REST API
+- All remote site requests now target Events Manager API instead of deprecated custom endpoint
+- Error messages updated to reference "Events Manager plugin" for clarity
+
+#### **API Response Handling for Events Manager**
+
+- Updated response parsing to handle Events Manager API format
+- Changed from wrapped response format (`data['success']` with `data['data']`) to direct attachment object
+- Now expects `id`, `url`, `mime_type` fields directly in response
+- Added validation for `id` field presence instead of `success` flag
+
+---
+
 ## [1.1.3] - 2026-07-23
 
 ### Changed

@@ -60,55 +60,57 @@ class Event_Controller_Form_Handler {
 
 		$errors = array();
 		$all_responses = array();  // Collect responses with empty_fields data
+		$media_ids = array();  // Track media ID PER SITE
 
-		// Process each selected site
+		// Build credentials for all sites
+		$site_credentials = array();
 		foreach ( $selected_sites as $site_id ) {
 			$site_id = sanitize_text_field( $site_id );
-			error_log('EVENT_CONTROLLER: Processing site: ' . $site_id);
-
-			// Get site credentials from ACF
 			$credentials = $this->get_site_credentials_by_id( $site_id );
 			if ( ! $credentials ) {
 				error_log('EVENT_CONTROLLER: Credentials not found for site: ' . $site_id);
-				// Site ID not found - use sanitized ID as fallback
 				$errors[] = "Site configuration not found for: " . ucwords( str_replace( '_', ' ', $site_id ) );
 				continue;
 			}
+			$site_credentials[ $site_id ] = $credentials;
+		}
 
-			// Upload media if file exists
-			$media_id = null;
-			if ( $file && ! empty( $file['tmp_name'] ) ) {
-				error_log('EVENT_CONTROLLER: Uploading media for site: ' . $site_id);
-				$media_id = $this->upload_media_to_remote( $credentials, $file );
-				if ( is_wp_error( $media_id ) ) {
-					error_log('EVENT_CONTROLLER: Media upload failed for ' . $site_id . ': ' . $media_id->get_error_message());
-					// Include site name in error for better UX
-					$errors[] = $credentials['name'] . ": " . $media_id->get_error_message();
-					continue;
+		// PHASE 1: Parallel media uploads
+		if ( $file && ! empty( $file['tmp_name'] ) ) {
+			error_log('EVENT_CONTROLLER: Starting parallel media uploads for ' . count( $site_credentials ) . ' sites');
+			$media_results = $this->upload_media_parallel( $site_credentials, $file );
+			
+			// Check for upload failures and track media IDs per site
+			foreach ( $media_results as $site_id => $result ) {
+				if ( is_wp_error( $result ) ) {
+					error_log('EVENT_CONTROLLER: Media upload failed for ' . $site_id . ': ' . $result->get_error_message());
+					$errors[] = $site_credentials[ $site_id ]['name'] . ": " . $result->get_error_message();
+					unset( $site_credentials[ $site_id ] );
+				} else {
+					error_log('EVENT_CONTROLLER: Media uploaded for ' . $site_id . ', ID: ' . $result);
+					$media_ids[ $site_id ] = $result;  // Store per-site media ID
 				}
-				error_log('EVENT_CONTROLLER: Media uploaded successfully for site: ' . $site_id . ', ID: ' . $media_id);
 			}
+		}
 
-			// Add media ID to event data
-			if ( $media_id ) {
-				$event_data['featured_media'] = $media_id;
-			}
-
-			// Post event to remote site
-			error_log('EVENT_CONTROLLER: Posting event to site: ' . $site_id);
-			$result = $this->post_event_to_remote( $credentials, $event_data );
-			if ( is_wp_error( $result ) ) {
-				error_log('EVENT_CONTROLLER: Event post failed for ' . $site_id . ': ' . $result->get_error_message());
-				// Include site name in error for better UX
-				$errors[] = $credentials['name'] . ": " . $result->get_error_message();
-			} else {
-				error_log('EVENT_CONTROLLER: Event posted successfully to site: ' . $site_id);
-				// Wrap response with site metadata for frontend display
-				$all_responses[] = array(
-					'site_id' => $site_id,
-					'site_name' => $credentials['name'],
-					'response' => $result
-				);
+		// PHASE 2: Parallel event posts (only for sites that passed media upload)
+		if ( ! empty( $site_credentials ) ) {
+			error_log('EVENT_CONTROLLER: Starting parallel event posts for ' . count( $site_credentials ) . ' sites');
+			$post_results = $this->post_event_parallel( $site_credentials, $event_data, $media_ids );
+			
+			// Process post results
+			foreach ( $post_results as $site_id => $result ) {
+				if ( is_wp_error( $result ) ) {
+					error_log('EVENT_CONTROLLER: Event post failed for ' . $site_id . ': ' . $result->get_error_message());
+					$errors[] = $site_credentials[ $site_id ]['name'] . ": " . $result->get_error_message();
+				} else {
+					error_log('EVENT_CONTROLLER: Event posted successfully to site: ' . $site_id);
+					$all_responses[] = array(
+						'site_id' => $site_id,
+						'site_name' => $site_credentials[ $site_id ]['name'],
+						'response' => $result
+					);
+				}
 			}
 		}
 
@@ -181,10 +183,298 @@ class Event_Controller_Form_Handler {
 	}
 
 	/**
-	 * Upload media to remote site
+	 * Upload media to multiple remote sites in parallel
+	 * 
+	 * @param array $site_credentials Keyed by site_id with 'url', 'username', 'password', 'name'
+	 * @param array $file The $_FILES array entry
+	 * @return array Keyed by site_id with media ID on success or WP_Error on failure
+	 */
+	private function upload_media_parallel( $site_credentials, $file ) {
+		$results = array();
+		
+		// Check if cURL multi is available
+		if ( ! function_exists( 'curl_multi_init' ) ) {
+			error_log('EVENT_CONTROLLER: cURL multi not available, falling back to sequential uploads');
+			foreach ( $site_credentials as $site_id => $creds ) {
+				$results[ $site_id ] = $this->upload_media_to_remote( $creds, $file );
+			}
+			return $results;
+		}
+
+		$multi_handle = curl_multi_init();
+		$handles = array();
+		$file_content = file_get_contents( $file['tmp_name'] );
+
+		error_log('EVENT_CONTROLLER: Setting up parallel media uploads for ' . count( $site_credentials ) . ' sites');
+
+		// Create upload requests for all sites
+		foreach ( $site_credentials as $site_id => $credentials ) {
+			$upload_url = rtrim( $credentials['url'], '/' ) . '/wp-json/events-manager/v1/media';
+
+			// Validate URL
+			if ( ! filter_var( $upload_url, FILTER_VALIDATE_URL ) || 0 !== strpos( $upload_url, 'https://' ) ) {
+				error_log('EVENT_CONTROLLER: Invalid upload URL: ' . $upload_url);
+				$results[ $site_id ] = new WP_Error( 'invalid_url', 'Invalid or unsecure URL' );
+				continue;
+			}
+
+			// Build multipart body
+			$boundary = wp_generate_password( 24 );
+			$body = $this->build_multipart_body( $file, $boundary );
+
+			// Create cURL handle
+			$handle = curl_init();
+			curl_setopt_array( $handle, array(
+				CURLOPT_URL            => $upload_url,
+				CURLOPT_POST           => true,
+				CURLOPT_POSTFIELDS     => $body,
+				CURLOPT_HTTPHEADER     => array(
+					'Authorization: Basic ' . base64_encode( $credentials['username'] . ':' . $credentials['password'] ),
+					'Content-Type: multipart/form-data; boundary=' . $boundary,
+				),
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_TIMEOUT        => 30,
+				CURLOPT_SSL_VERIFYPEER => true,
+			) );
+
+			curl_multi_add_handle( $multi_handle, $handle );
+			$handles[ $site_id ] = $handle;
+			error_log('EVENT_CONTROLLER: Added upload request for site: ' . $site_id);
+		}
+
+		// Execute all requests in parallel
+		$running = null;
+		do {
+			curl_multi_exec( $multi_handle, $running );
+			curl_multi_select( $multi_handle );
+		} while ( $running > 0 );
+
+		error_log('EVENT_CONTROLLER: All parallel media uploads completed');
+
+		// Process responses
+		foreach ( $handles as $site_id => $handle ) {
+			$response_code = curl_getinfo( $handle, CURLINFO_HTTP_CODE );
+			$response_body = curl_multi_getcontent( $handle );
+			$curl_error = curl_error( $handle );
+
+			error_log('EVENT_CONTROLLER: Site ' . $site_id . ' upload response code: ' . $response_code);
+
+			if ( $curl_error ) {
+				error_log('EVENT_CONTROLLER: cURL error for ' . $site_id . ': ' . $curl_error);
+				
+				// Map common cURL errors
+				$connection_errors = array(
+					'7'  => 'Failed to connect to remote site - site may be down or URL is incorrect',
+					'28' => 'Remote site is not responding - connection timed out',
+					'6'  => 'Invalid site URL or DNS not resolving - check site URL configuration',
+					'60' => 'SSL certificate error on remote site - contact site administrator',
+				);
+				
+				$user_message = 'Failed to upload media: Failed to connect to remote site';
+				foreach ( $connection_errors as $code => $message ) {
+					if ( strpos( $curl_error, $code ) !== false ) {
+						$user_message = 'Failed to upload media: ' . $message;
+						break;
+					}
+				}
+				
+				$results[ $site_id ] = new WP_Error( 'upload_failed', $user_message );
+				curl_multi_remove_handle( $multi_handle, $handle );
+				curl_close( $handle );
+				continue;
+			}
+
+			if ( ! in_array( (int) $response_code, array( 200, 201 ), true ) ) {
+				error_log('EVENT_CONTROLLER: Upload failed for ' . $site_id . ' with status ' . $response_code . ': ' . $response_body);
+
+				$http_errors = array(
+					'401' => 'Authentication failed - check application username and password',
+					'403' => 'Access denied - user does not have permission to upload files',
+					'404' => 'Remote media upload endpoint not found - check if Events Manager plugin is installed on remote site',
+					'413' => 'File is too large - reduce file size',
+					'500' => 'Server error on remote site - check event client error logs',
+					'503' => 'Remote site service unavailable - try again later',
+				);
+
+				$error_message = isset( $http_errors[ (string) $response_code ] ) 
+					? $http_errors[ (string) $response_code ] 
+					: "Server returned HTTP status $response_code";
+
+				$results[ $site_id ] = new WP_Error( 'upload_error', "Media upload failed - $error_message" );
+				curl_multi_remove_handle( $multi_handle, $handle );
+				curl_close( $handle );
+				continue;
+			}
+
+			// Parse successful response
+			$data = json_decode( $response_body, true );
+			if ( ! isset( $data['id'] ) ) {
+				error_log('EVENT_CONTROLLER: Invalid upload response for ' . $site_id . ' - missing id: ' . $response_body);
+				$results[ $site_id ] = new WP_Error( 'invalid_response', 'Invalid response from media upload' );
+			} else {
+				error_log('EVENT_CONTROLLER: Media uploaded successfully for ' . $site_id . ', ID: ' . $data['id']);
+				$results[ $site_id ] = $data['id'];
+			}
+
+			curl_multi_remove_handle( $multi_handle, $handle );
+			curl_close( $handle );
+		}
+
+		curl_multi_close( $multi_handle );
+		return $results;
+	}
+
+	/**
+	 * Post events to multiple remote sites in parallel
+	 * 
+	 * @param array $site_credentials Keyed by site_id with 'url', 'username', 'password', 'name'
+	 * @param array $event_data The event data to post
+	 * @param array $media_ids Keyed by site_id with the media ID for each site
+	 * @return array Keyed by site_id with response data on success or WP_Error on failure
+	 */
+	private function post_event_parallel( $site_credentials, $event_data, $media_ids = array() ) {
+		$results = array();
+		
+		// Check if cURL multi is available
+		if ( ! function_exists( 'curl_multi_init' ) ) {
+			error_log('EVENT_CONTROLLER: cURL multi not available, falling back to sequential posts');
+			foreach ( $site_credentials as $site_id => $creds ) {
+				// Use site-specific media ID if available
+				$site_event_data = $event_data;
+				if ( isset( $media_ids[ $site_id ] ) ) {
+					$site_event_data['featured_media'] = $media_ids[ $site_id ];
+				}
+				$results[ $site_id ] = $this->post_event_to_remote( $creds, $site_event_data );
+			}
+			return $results;
+		}
+
+		$multi_handle = curl_multi_init();
+		$handles = array();
+
+		error_log('EVENT_CONTROLLER: Setting up parallel event posts for ' . count( $site_credentials ) . ' sites');
+
+		// Create post requests for all sites
+		foreach ( $site_credentials as $site_id => $credentials ) {
+			$post_url = rtrim( $credentials['url'], '/' ) . '/wp-json/events-manager/v1/events';
+
+			// Validate URL
+			if ( ! filter_var( $post_url, FILTER_VALIDATE_URL ) || 0 !== strpos( $post_url, 'https://' ) ) {
+				error_log('EVENT_CONTROLLER: Invalid post URL: ' . $post_url);
+				$results[ $site_id ] = new WP_Error( 'invalid_url', 'Invalid or unsecure URL' );
+				continue;
+			}
+
+			// Use site-specific media ID if available
+			$site_event_data = $event_data;
+			if ( isset( $media_ids[ $site_id ] ) ) {
+				$site_event_data['featured_media'] = $media_ids[ $site_id ];
+				error_log('EVENT_CONTROLLER: Using media ID ' . $media_ids[ $site_id ] . ' for site ' . $site_id);
+			}
+
+			$em_payload = $this->transform_to_em_api_schema( $site_event_data );
+
+			// Create cURL handle
+			$handle = curl_init();
+			curl_setopt_array( $handle, array(
+				CURLOPT_URL            => $post_url,
+				CURLOPT_POST           => true,
+				CURLOPT_POSTFIELDS     => json_encode( $em_payload ),
+				CURLOPT_HTTPHEADER     => array(
+					'Authorization: Basic ' . base64_encode( $credentials['username'] . ':' . $credentials['password'] ),
+					'Content-Type: application/json',
+				),
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_TIMEOUT        => 30,
+				CURLOPT_SSL_VERIFYPEER => true,
+			) );
+
+			curl_multi_add_handle( $multi_handle, $handle );
+			$handles[ $site_id ] = $handle;
+			error_log('EVENT_CONTROLLER: Added post request for site: ' . $site_id);
+		}
+
+		// Execute all requests in parallel
+		$running = null;
+		do {
+			curl_multi_exec( $multi_handle, $running );
+			curl_multi_select( $multi_handle );
+		} while ( $running > 0 );
+
+		error_log('EVENT_CONTROLLER: All parallel event posts completed');
+
+		// Process responses
+		foreach ( $handles as $site_id => $handle ) {
+			$response_code = curl_getinfo( $handle, CURLINFO_HTTP_CODE );
+			$response_body = curl_multi_getcontent( $handle );
+			$curl_error = curl_error( $handle );
+
+			error_log('EVENT_CONTROLLER: Site ' . $site_id . ' post response code: ' . $response_code);
+
+			if ( $curl_error ) {
+				error_log('EVENT_CONTROLLER: cURL error for ' . $site_id . ': ' . $curl_error);
+				
+				// Map common cURL errors
+				$connection_errors = array(
+					'7'  => 'Failed to connect to remote site - site may be down or URL is incorrect',
+					'28' => 'Remote site is not responding - connection timed out',
+					'6'  => 'Invalid site URL or DNS not resolving - check site URL configuration',
+					'60' => 'SSL certificate error on remote site - contact site administrator',
+				);
+				
+				$user_message = 'Failed to post event: Failed to connect to remote site';
+				foreach ( $connection_errors as $code => $message ) {
+					if ( strpos( $curl_error, $code ) !== false ) {
+						$user_message = 'Failed to post event: ' . $message;
+						break;
+					}
+				}
+				
+				$results[ $site_id ] = new WP_Error( 'post_failed', $user_message );
+				curl_multi_remove_handle( $multi_handle, $handle );
+				curl_close( $handle );
+				continue;
+			}
+
+			if ( ! in_array( (int) $response_code, array( 200, 201 ), true ) ) {
+				error_log('EVENT_CONTROLLER: Post failed for ' . $site_id . ' with status ' . $response_code . ': ' . $response_body);
+
+				$http_errors = array(
+					'401' => 'Authentication failed - check application username and password',
+					'403' => 'Access denied - user does not have permission to create events',
+					'404' => 'Remote event creation endpoint not found - check if Events Manager plugin is installed on remote site',
+					'500' => 'Server error on remote site - check event client error logs',
+					'503' => 'Remote site service unavailable - try again later',
+				);
+
+				$error_message = isset( $http_errors[ (string) $response_code ] ) 
+					? $http_errors[ (string) $response_code ] 
+					: "Server returned HTTP status $response_code";
+
+				$results[ $site_id ] = new WP_Error( 'post_error', "HTTP $response_code - $error_message" );
+				curl_multi_remove_handle( $multi_handle, $handle );
+				curl_close( $handle );
+				continue;
+			}
+
+			// Parse successful response
+			$response_data = json_decode( $response_body, true );
+			error_log('EVENT_CONTROLLER: Event posted successfully for ' . $site_id);
+			$results[ $site_id ] = $response_data;
+
+			curl_multi_remove_handle( $multi_handle, $handle );
+			curl_close( $handle );
+		}
+
+		curl_multi_close( $multi_handle );
+		return $results;
+	}
+
+	/**
+	 * Upload media to remote site via Events Manager API
 	 */
 	private function upload_media_to_remote( $credentials, $file ) {
-		$upload_url = rtrim( $credentials['url'], '/' ) . '/wp-json/sbhc/v2/media_upload';
+		$upload_url = rtrim( $credentials['url'], '/' ) . '/wp-json/events-manager/v1/media';
 
 		// Validate URL
 		if ( ! filter_var( $upload_url, FILTER_VALIDATE_URL ) || 0 !== strpos( $upload_url, 'https://' ) ) {
@@ -250,7 +540,7 @@ class Event_Controller_Form_Handler {
 			$http_errors = array(
 				'401' => 'Authentication failed - check application username and password',
 				'403' => 'Access denied - user does not have permission to upload files',
-				'404' => 'Remote media upload endpoint not found - check if event plugin is installed to the event client site',
+				'404' => 'Remote media upload endpoint not found - check if Events Manager plugin is installed on remote site',
 				'413' => 'File is too large - reduce file size',
 				'500' => 'Server error on remote site - check event client error logs',
 				'503' => 'Remote site service unavailable - try again later',
@@ -269,19 +559,81 @@ class Event_Controller_Form_Handler {
 		$body = wp_remote_retrieve_body( $response );
 		$data = json_decode( $body, true );
 
-		if ( ! isset( $data['data'] ) || ! isset( $data['success'] ) || ! $data['success'] ) {
-			error_log('EVENT_CONTROLLER: Invalid upload response: ' . $body);
+		// Events Manager API returns attachment object directly with 'id', 'url', 'mime_type', etc.
+		// No 'success' wrapper, just the attachment data
+		if ( ! isset( $data['id'] ) ) {
+			error_log('EVENT_CONTROLLER: Invalid upload response - missing id: ' . $body);
 			return new WP_Error( 'invalid_response', 'Invalid response from media upload' );
 		}
 
-		return $data['data'];
+		error_log('EVENT_CONTROLLER: Media uploaded successfully, attachment ID: ' . $data['id']);
+		return $data['id'];
 	}
 
 	/**
-	 * Post event to remote site
+	 * Transform form data to Events Manager API schema
+	 */
+	private function transform_to_em_api_schema( $event_data ) {
+		// Extract meta_input if it exists
+		$meta = isset( $event_data['meta_input'] ) ? $event_data['meta_input'] : array();
+		
+		// Build EM API payload
+		$em_payload = array(
+			'event_name'           => $event_data['event_title'] ?? '',
+			'content'              => '',
+			'event_type'           => 'single',
+			'post_status'          => 'publish',
+			'event_start_date'     => $meta['event_start_date'] ?? '',
+			'event_end_date'       => $meta['event_end_date'] ?? '',
+			'event_start_time'     => $meta['event_start_time'] ?? '',
+			'event_end_time'       => $meta['event_end_time'] ?? '',
+			'event_timezone'       => $meta['event_time_zone'] ?? 'UTC',
+			'event_all_day'        => false,
+			'event_rsvp'           => 0,
+			'event_rsvp_spaces'    => 0,
+			'event_spaces'         => 0,
+			'event_active_status'  => 1,
+			'event_private'        => 0,
+			'featured_image'       => $event_data['featured_media'] ?? 0,
+			'location_id'          => 0,
+			'location_name'        => $event_data['event_location'] ?? '',
+			'location_address'     => '',
+			'location_town'        => '',
+			'location_state'       => '',
+			'location_postcode'    => '',
+			'location_region'      => '',
+			'location_country'     => 'US',
+			'location_latitude'    => 0,
+			'location_longitude'   => 0,
+			'event_categories'     => array(),
+			'event_tags'           => array(),
+			'em_attributes'        => array(),
+			'data_privacy_consent' => true,
+			'data_comms_consent'   => true,
+			
+			// Custom ACF-mapped fields (will be picked up by em_api_event_save hook on remote site)
+			'presenter'            => $event_data['presenter'] ?? '',
+			'ticket_price'         => $event_data['ticket_price'] ?? '',
+			'event_location_type'  => $meta['event_location_type'] ?? $event_data['event_type'] ?? '',
+			'summary'              => $event_data['summary'] ?? '',
+			'short_summary'        => $event_data['short_summary'] ?? '',
+			'contact_name'         => $event_data['contact_name'] ?? '',
+			'contact_number'       => $event_data['contact_number'] ?? '',
+			'contact_address'      => $event_data['contact_address'] ?? '',
+			'registration_link'    => $event_data['registration_link'] ?? '',
+			'objectives'           => $event_data['objectives'] ?? array(),
+		);
+		
+		error_log('EVENT_CONTROLLER: Building EM API payload with featured_image: ' . json_encode($em_payload['featured_image']));
+		error_log('EVENT_CONTROLLER: Transformed payload: ' . json_encode( $em_payload ));
+		return $em_payload;
+	}
+
+	/**
+	 * Post event to remote site via Events Manager API
 	 */
 	private function post_event_to_remote( $credentials, $event_data ) {
-		$post_url = rtrim( $credentials['url'], '/' ) . '/wp-json/sbhc/v2/postevent';
+		$post_url = rtrim( $credentials['url'], '/' ) . '/wp-json/events-manager/v1/events';
 
 		// Validate URL
 		if ( ! filter_var( $post_url, FILTER_VALIDATE_URL ) || 0 !== strpos( $post_url, 'https://' ) ) {
@@ -290,6 +642,12 @@ class Event_Controller_Form_Handler {
 		}
 
 		error_log('EVENT_CONTROLLER: Posting to: ' . $post_url);
+
+		// Transform form data to EM API schema
+		$em_payload = $this->transform_to_em_api_schema( $event_data );
+		
+		error_log('EVENT_CONTROLLER: Sending payload with featured_image: ' . $em_payload['featured_image']);
+		error_log('EVENT_CONTROLLER: Full payload JSON: ' . json_encode( $em_payload ));
 
 		// Make request
 		$response = wp_remote_post(
@@ -300,7 +658,7 @@ class Event_Controller_Form_Handler {
 					'Authorization' => 'Basic ' . base64_encode( $credentials['username'] . ':' . $credentials['password'] ),
 					'Content-Type'  => 'application/json',
 				),
-				'body'      => json_encode( $event_data ),
+				'body'      => json_encode( $em_payload ),
 				'timeout'   => 30,
 				'sslverify' => true,
 			)
@@ -343,7 +701,7 @@ class Event_Controller_Form_Handler {
 			$http_errors = array(
 				'401' => 'Authentication failed - check application username and password',
 				'403' => 'Access denied - user does not have permission to create events',
-				'404' => 'Remote event creation endpoint not found - check if event plugin is installed to the event client site',
+				'404' => 'Remote event creation endpoint not found - check if Events Manager plugin is installed on remote site',
 				'500' => 'Server error on remote site - check event client error logs',
 				'503' => 'Remote site service unavailable - try again later',
 			);
@@ -377,7 +735,7 @@ class Event_Controller_Form_Handler {
 			$file_name    = basename( $file['name'] );
 
 			$body .= '--' . $boundary . "\r\n";
-			$body .= 'Content-Disposition: form-data; name="async-upload"; filename="' . $file_name . "\"\r\n";
+			$body .= 'Content-Disposition: form-data; name="file"; filename="' . $file_name . "\"\r\n";
 			$body .= 'Content-Type: ' . ( $file['type'] ?? 'application/octet-stream' ) . "\r\n\r\n";
 			$body .= $file_content . "\r\n";
 			$body .= '--' . $boundary . '--';
