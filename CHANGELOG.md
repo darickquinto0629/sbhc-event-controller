@@ -2,6 +2,51 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.2.1] - 2026-08-05
+
+### Fixed
+
+#### **AJAX Response Hanging on Form Submission**
+
+- Fixed issue where AJAX response hung indefinitely after form submission
+- Root cause: `wp_send_json_success()` calls `wp_die()` before result caching completed
+- Reorganized execution order: caching now completes in try-finally block before response sent
+- AJAX now responds promptly (~5-30 seconds) instead of hanging indefinitely
+
+#### **Duplicate Event Prevention with Proxy Retry Handling**
+
+- Implemented payload-based idempotency key (SHA256 hash of sites + event_data)
+- Added atomic lock mechanism using WordPress options table `add_option()`
+- Implemented dual-layer result caching: wp_cache (memory) + wp_options (persistent)
+- Retry requests now wait up to 120 seconds for cached result from original request
+- Prevents duplicate event posting when WPMUDEV nginx proxy retries after timeout
+- Lock automatically released after caching completes
+
+#### **cURL Multi Timeout Protection**
+
+- Added 1-second timeout to `curl_multi_select()` to prevent indefinite blocking
+- Added 120-second hard limit to parallel media upload and event post operations
+- Operations break gracefully if timeout exceeded and return partial results
+- Prevents hanging on large file uploads (tested with 4.1 MB featured images)
+
+#### **Error Logging for Production Monitoring**
+
+- Added comprehensive error logging (~85 statements) throughout submission workflow
+- Logs include: lock acquisition, retry detection, credential lookup, upload/post progress
+- Tracks per-site media ID assignments and response codes
+- Enables debugging of remote site failures without access to remote server logs
+
+### Changed
+
+#### **Try-Finally Pattern for Lock Management**
+
+- Submission processing now uses try-finally block structure
+- Lock acquired before try block, held throughout processing
+- Finally block executes after all operations complete (success or early return)
+- Ensures lock is always released and result always cached before response sent
+
+---
+
 ## [1.2.0] - 2026-08-04
 
 ### Added

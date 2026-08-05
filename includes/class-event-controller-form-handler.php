@@ -17,7 +17,48 @@ class Event_Controller_Form_Handler {
 	 */
 	public function __construct() {
 		add_action( 'wp_ajax_event_controller_submit_event', array( $this, 'handle_form_submission' ) );
-		add_action( 'wp_ajax_nopriv_event_controller_submit_event', array( $this, 'handle_form_submission' ) );
+		//add_action( 'wp_ajax_nopriv_event_controller_submit_event', array( $this, 'handle_form_submission' ) );
+	}
+
+	/**
+	 * Refresh nonce for subsequent form submissions
+	 * Called after form reset to ensure fresh nonce for next submission
+	 */
+	public function handle_refresh_nonce() {
+		$nonce = wp_create_nonce( 'event_controller_submit' );
+		wp_send_json_success( array( 'nonce' => $nonce ) );
+	}
+
+	/**
+	 * Wait for processing result from original request
+	 * Used by retry connections to get the final result instead of hanging
+	 * 
+	 * @param string $idempotency_key Unique key for this submission
+	 * @param int $timeout Maximum seconds to wait (default 120)
+	 * @return array|false Final result if available, false if timeout
+	 */
+	private function wait_for_result( $idempotency_key, $timeout = 120 ) {
+		$result_key = 'event_controller_result_' . $idempotency_key;
+		$start_time = time();
+		$poll_interval = 1; // Check every 1 second
+		
+		error_log('EVENT_CONTROLLER: Retry waiting for result, max wait: ' . $timeout . 's');
+		
+		while ( time() - $start_time < $timeout ) {
+			// Check cache first (faster than database)
+			$result = wp_cache_get( $result_key );
+			if ( ! $result ) {
+				$result = get_option( $result_key );
+			}
+			if ( $result ) {
+				error_log('EVENT_CONTROLLER: Retry retrieved result after ' . (time() - $start_time) . 's');
+				return $result;
+			}
+			sleep( $poll_interval );
+		}
+		
+		error_log('EVENT_CONTROLLER: Retry timeout - result not available after ' . $timeout . 's');
+		return false;
 	}
 
 	/**
@@ -48,101 +89,216 @@ class Event_Controller_Form_Handler {
 		error_log('EVENT_CONTROLLER: Event data received: ' . json_encode($event_data));
 		error_log('EVENT_CONTROLLER: File: ' . json_encode($file ? array('name' => $file['name'], 'size' => $file['size']) : 'none'));
 
-		if ( empty( $selected_sites ) ) {
-			error_log('EVENT_CONTROLLER: No sites selected');
-			wp_send_json_error( array( 'message' => 'No sites selected' ) );
-		}
-
-		if ( empty( $event_data ) ) {
-			error_log('EVENT_CONTROLLER: No event data');
-			wp_send_json_error( array( 'message' => 'No event data provided' ) );
-		}
-
-		$errors = array();
-		$all_responses = array();  // Collect responses with empty_fields data
-		$media_ids = array();  // Track media ID PER SITE
-
-		// Build credentials for all sites
-		$site_credentials = array();
-		foreach ( $selected_sites as $site_id ) {
-			$site_id = sanitize_text_field( $site_id );
-			$credentials = $this->get_site_credentials_by_id( $site_id );
-			if ( ! $credentials ) {
-				error_log('EVENT_CONTROLLER: Credentials not found for site: ' . $site_id);
-				$errors[] = "Site configuration not found for: " . ucwords( str_replace( '_', ' ', $site_id ) );
-				continue;
+		// Create idempotency key to prevent duplicate submissions
+		// Uses selected sites + event data to uniquely identify this submission
+		// Reason: WPMUDEV nginx proxy may retry requests if the backend processing takes longer
+		// than the proxy timeout (~30-45 seconds), while backend is still processing (~60 seconds).
+		// This causes the proxy to resend the same request, creating duplicate events if not prevented.
+		// The idempotency key is generated from the payload (sites + data), so the same event
+		// submission always produces the same key regardless of security tokens like nonces.
+		$idempotency_key = hash(
+			'sha256',
+			wp_json_encode( [
+				'sites' => $selected_sites,
+				'data'  => $event_data,
+			] )
+		);
+		
+		// Attempt to acquire an atomic lock using add_option
+		// add_option() only succeeds if the option doesn't exist (atomic operation)
+		// Only the original request succeeds; retries wait for the result
+		$lock_key = 'event_controller_lock_' . $idempotency_key;
+		$lock_acquired = add_option( $lock_key, time(), '', 'no' );
+		
+		if ( $lock_acquired ) {
+			// Lock acquired - this is the original request
+			error_log('EVENT_CONTROLLER: Lock acquired for submission: ' . $idempotency_key);
+		} else {
+			// Lock exists - this is a retry, wait for the original request to complete
+			error_log('EVENT_CONTROLLER: Proxy retry detected, waiting for original request to complete');
+			$cached_result = $this->wait_for_result( $idempotency_key, 120 );
+			if ( $cached_result ) {
+				error_log('EVENT_CONTROLLER: Retry returning cached result');
+				header( 'Content-Type: application/json' );
+				echo wp_json_encode( $cached_result );
+				exit;
+			} else {
+				error_log('EVENT_CONTROLLER: Retry timeout - no result available');
+				wp_send_json_error( array( 'message' => 'Request processing timeout' ) );
 			}
-			$site_credentials[ $site_id ] = $credentials;
 		}
+		
+		// Lock is now acquired, proceed with processing
+		error_log('EVENT_CONTROLLER: Processing submission: ' . $idempotency_key);
 
-		// PHASE 1: Parallel media uploads
-		if ( $file && ! empty( $file['tmp_name'] ) ) {
-			error_log('EVENT_CONTROLLER: Starting parallel media uploads for ' . count( $site_credentials ) . ' sites');
-			$media_results = $this->upload_media_parallel( $site_credentials, $file );
-			
-			// Check for upload failures and track media IDs per site
-			foreach ( $media_results as $site_id => $result ) {
-				if ( is_wp_error( $result ) ) {
-					error_log('EVENT_CONTROLLER: Media upload failed for ' . $site_id . ': ' . $result->get_error_message());
-					$errors[] = $site_credentials[ $site_id ]['name'] . ": " . $result->get_error_message();
-					unset( $site_credentials[ $site_id ] );
-				} else {
-					error_log('EVENT_CONTROLLER: Media uploaded for ' . $site_id . ', ID: ' . $result);
-					$media_ids[ $site_id ] = $result;  // Store per-site media ID
+		// Prepare response outside of try-finally to avoid releasing lock before response is sent
+		$response_to_send = null;
+		$http_status = null;
+
+		try {
+			if ( empty( $selected_sites ) ) {
+				error_log('EVENT_CONTROLLER: No sites selected');
+				$response_to_send = array( 'success' => false, 'data' => array( 'message' => 'No sites selected' ) );
+				$http_status = 'error';
+				return; // Jump to finally block
+			}
+
+			if ( empty( $event_data ) ) {
+				error_log('EVENT_CONTROLLER: No event data');
+				$response_to_send = array( 'success' => false, 'data' => array( 'message' => 'No event data provided' ) );
+				$http_status = 'error';
+				return; // Jump to finally block
+			}
+
+			$errors = array();
+			$all_responses = array();  // Collect responses with empty_fields data
+			$media_ids = array();  // Track media ID PER SITE
+
+			// Build credentials for all sites
+			$site_credentials = array();
+			foreach ( $selected_sites as $site_id ) {
+				$site_id = sanitize_text_field( $site_id );
+				$credentials = $this->get_site_credentials_by_id( $site_id );
+				if ( ! $credentials ) {
+					error_log('EVENT_CONTROLLER: Credentials not found for site: ' . $site_id);
+					$errors[] = "Site configuration not found for: " . ucwords( str_replace( '_', ' ', $site_id ) );
+					continue;
+				}
+				$site_credentials[ $site_id ] = $credentials;
+			}
+
+			// PHASE 1: Parallel media uploads
+			// NOTE: Keep featured images under 1MB (recommended 300-500KB) to avoid proxy timeouts.
+			// Large images can cause backend processing to exceed the nginx proxy timeout (~30-45 seconds),
+			// which triggers proxy retries and creates duplicate events.
+			if ( $file && ! empty( $file['tmp_name'] ) ) {
+				error_log('EVENT_CONTROLLER: Starting parallel media uploads for ' . count( $site_credentials ) . ' sites');
+				$media_results = $this->upload_media_parallel( $site_credentials, $file );
+				
+				// Check for upload failures and track media IDs per site
+				foreach ( $media_results as $site_id => $result ) {
+					if ( is_wp_error( $result ) ) {
+						error_log('EVENT_CONTROLLER: Media upload failed for ' . $site_id . ': ' . $result->get_error_message());
+						$errors[] = $site_credentials[ $site_id ]['name'] . ": " . $result->get_error_message();
+						unset( $site_credentials[ $site_id ] );
+					} else {
+						error_log('EVENT_CONTROLLER: Media uploaded for ' . $site_id . ', ID: ' . $result);
+						$media_ids[ $site_id ] = $result;  // Store per-site media ID
+					}
 				}
 			}
-		}
 
-		// PHASE 2: Parallel event posts (only for sites that passed media upload)
-		if ( ! empty( $site_credentials ) ) {
-			error_log('EVENT_CONTROLLER: Starting parallel event posts for ' . count( $site_credentials ) . ' sites');
-			$post_results = $this->post_event_parallel( $site_credentials, $event_data, $media_ids );
-			
-			// Process post results
-			foreach ( $post_results as $site_id => $result ) {
-				if ( is_wp_error( $result ) ) {
-					error_log('EVENT_CONTROLLER: Event post failed for ' . $site_id . ': ' . $result->get_error_message());
-					$errors[] = $site_credentials[ $site_id ]['name'] . ": " . $result->get_error_message();
-				} else {
-					error_log('EVENT_CONTROLLER: Event posted successfully to site: ' . $site_id);
-					$all_responses[] = array(
-						'site_id' => $site_id,
-						'site_name' => $site_credentials[ $site_id ]['name'],
-						'response' => $result
-					);
+			// PHASE 2: Parallel event posts (only for sites that passed media upload)
+			if ( ! empty( $site_credentials ) ) {
+				error_log('EVENT_CONTROLLER: Starting parallel event posts for ' . count( $site_credentials ) . ' sites');
+				$post_results = $this->post_event_parallel( $site_credentials, $event_data, $media_ids );
+				
+				// Process post results
+				foreach ( $post_results as $site_id => $result ) {
+					if ( is_wp_error( $result ) ) {
+						error_log('EVENT_CONTROLLER: Event post failed for ' . $site_id . ': ' . $result->get_error_message());
+						$errors[] = $site_credentials[ $site_id ]['name'] . ": " . $result->get_error_message();
+					} else {
+						error_log('EVENT_CONTROLLER: Event posted successfully to site: ' . $site_id);
+						$all_responses[] = array(
+							'site_id' => $site_id,
+							'site_name' => $site_credentials[ $site_id ]['name'],
+							'response' => $result
+						);
+					}
 				}
 			}
+
+			// Calculate success/failure counts
+			$total_sites = count( $selected_sites );
+			$succeeded_count = count( $all_responses );
+			$failed_count = count( $errors );
+
+			if ( $failed_count === $total_sites ) {
+				// All sites failed - prepare error response
+				error_log('EVENT_CONTROLLER: Submission completed with all sites failed: ' . json_encode($errors));
+				$response_to_send = array( 'success' => false, 'data' => array( 'errors' => $errors ) );
+				$http_status = 'error';
+			} else {
+				// Partial success or all success - prepare success response
+				$is_partial = $failed_count > 0 && $succeeded_count > 0;
+				$message = $succeeded_count === $total_sites 
+					? 'All events posted successfully'
+					: "Partial success: $succeeded_count of $total_sites sites succeeded";
+
+				error_log('EVENT_CONTROLLER: Submission completed - ' . $message);
+				$response_to_send = array(
+					'success' => true,
+					'data' => array(
+						'message' => $message,
+						'responses' => $all_responses,
+						'errors' => $errors,
+						'partial_success' => $is_partial,
+						'stats' => array(
+							'total' => $total_sites,
+							'succeeded' => $succeeded_count,
+							'failed' => $failed_count
+						)
+					)
+				);
+				$http_status = 'success';
+			}
+		} finally {
+			// Release lock AFTER response is prepared but BEFORE it's sent
+			// This ensures retry requests can immediately find the cached result
+			// while original request still owns the lock until truly complete
+			error_log('EVENT_CONTROLLER: Entering finally block for: ' . $idempotency_key);
+			
+			if ( $response_to_send ) {
+				error_log('EVENT_CONTROLLER: Response to send exists, caching now');
+				$result_key = 'event_controller_result_' . $idempotency_key;
+				
+				error_log('EVENT_CONTROLLER: Before update_option, key: ' . $result_key);
+				$update_result = update_option( $result_key, $response_to_send );
+				error_log('EVENT_CONTROLLER: After update_option, result: ' . ($update_result ? 'true' : 'false'));
+				
+				// Verify it was saved
+				$verify = get_option( $result_key );
+				error_log('EVENT_CONTROLLER: Verified saved option (exists: ' . ($verify ? 'yes' : 'no') . ')');
+				
+				wp_cache_set( $result_key, $response_to_send, '', 300 );
+				error_log('EVENT_CONTROLLER: wp_cache_set executed');
+			} else {
+				error_log('EVENT_CONTROLLER: Response to send is NULL/empty, skipping cache');
+			}
+			
+			error_log('EVENT_CONTROLLER: Before release_lock');
+			$this->release_lock( $idempotency_key );
+			error_log('EVENT_CONTROLLER: After release_lock, about to exit finally');
 		}
 
-		// Calculate success/failure counts
-		$total_sites = count( $selected_sites );
-		$succeeded_count = count( $all_responses );
-		$failed_count = count( $errors );
-
-		if ( $failed_count === $total_sites ) {
-			// All sites failed - use existing error response (backward compatible)
-			error_log('EVENT_CONTROLLER: Submission completed with all sites failed: ' . json_encode($errors));
-			wp_send_json_error( array( 'errors' => $errors ) );
+		// Cache response and send after lock is released
+		error_log('EVENT_CONTROLLER: Exited finally, response_to_send is ' . ($response_to_send ? 'set' : 'null/empty'));
+		
+		if ( $response_to_send ) {
+			error_log('EVENT_CONTROLLER: Before wp_send_json call');
+			
+			if ( $http_status === 'error' ) {
+				error_log('EVENT_CONTROLLER: Calling wp_send_json_error');
+				wp_send_json_error( $response_to_send['data'] );
+			} else {
+				error_log('EVENT_CONTROLLER: Calling wp_send_json_success');
+				wp_send_json_success( $response_to_send['data'] );
+			}
+		} else {
+			error_log('EVENT_CONTROLLER: Response is null, not sending anything');
 		}
+	}
 
-		// Partial success or all success - use success response with all data (backward compatible)
-		$is_partial = $failed_count > 0 && $succeeded_count > 0;
-		$message = $succeeded_count === $total_sites 
-			? 'All events posted successfully'
-			: "Partial success: $succeeded_count of $total_sites sites succeeded";
-
-		error_log('EVENT_CONTROLLER: Submission completed - ' . $message);
-		wp_send_json_success( array( 
-			'message' => $message,
-			'responses' => $all_responses,
-			'errors' => $errors,
-			'partial_success' => $is_partial,
-			'stats' => array(
-				'total' => $total_sites,
-				'succeeded' => $succeeded_count,
-				'failed' => $failed_count
-			)
-		) );
+	/**
+	 * Release the processing lock
+	 * 
+	 * @param string $idempotency_key Unique key for this submission
+	 */
+	private function release_lock( $idempotency_key ) {
+		$lock_key = 'event_controller_lock_' . $idempotency_key;
+		delete_option( $lock_key );
+		error_log('EVENT_CONTROLLER: Lock released: ' . $lock_key);
 	}
 
 	/**
@@ -242,11 +398,19 @@ class Event_Controller_Form_Handler {
 			error_log('EVENT_CONTROLLER: Added upload request for site: ' . $site_id);
 		}
 
-		// Execute all requests in parallel
+		// Execute all requests in parallel with timeout protection
 		$running = null;
+		$start_time = time();
+		$operation_timeout = 120; // Max 120 seconds for all parallel operations
 		do {
 			curl_multi_exec( $multi_handle, $running );
-			curl_multi_select( $multi_handle );
+			// Use 1-second timeout to prevent blocking indefinitely
+			curl_multi_select( $multi_handle, 1 );
+			// Safety check: if operation takes longer than timeout, break out
+			if ( time() - $start_time > $operation_timeout ) {
+				error_log('EVENT_CONTROLLER: Parallel media upload timeout after ' . $operation_timeout . 's');
+				break;
+			}
 		} while ( $running > 0 );
 
 		error_log('EVENT_CONTROLLER: All parallel media uploads completed');
@@ -394,11 +558,19 @@ class Event_Controller_Form_Handler {
 			error_log('EVENT_CONTROLLER: Added post request for site: ' . $site_id);
 		}
 
-		// Execute all requests in parallel
+		// Execute all requests in parallel with timeout protection
 		$running = null;
+		$start_time = time();
+		$operation_timeout = 120; // Max 120 seconds for all parallel operations
 		do {
 			curl_multi_exec( $multi_handle, $running );
-			curl_multi_select( $multi_handle );
+			// Use 1-second timeout to prevent blocking indefinitely
+			curl_multi_select( $multi_handle, 1 );
+			// Safety check: if operation takes longer than timeout, break out
+			if ( time() - $start_time > $operation_timeout ) {
+				error_log('EVENT_CONTROLLER: Parallel event post timeout after ' . $operation_timeout . 's');
+				break;
+			}
 		} while ( $running > 0 );
 
 		error_log('EVENT_CONTROLLER: All parallel event posts completed');
