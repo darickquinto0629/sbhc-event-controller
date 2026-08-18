@@ -170,7 +170,12 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
 
     // Helper: Handle successful AJAX response
     function handleSubmissionSuccess(response) {
+      console.log('✓ AJAX REQUEST SUCCESS - Response received');
+      console.log('Raw Response:', response);
+      
       const result = typeof response === 'string' ? JSON.parse(response) : response;
+      console.log('Parsed Result:', result);
+      
       const modalBody = $('#sendingData .modal-body');
       
       isSubmitting = false;
@@ -183,7 +188,15 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       const hasSuccesses = result.data?.responses && result.data.responses.length > 0;
       const stats = result.data?.stats || {};
 
+      console.log('📊 Response Analysis:');
+      console.log('  - Overall Success:', result.success);
+      console.log('  - Partial Success:', isPartialSuccess);
+      console.log('  - Has Errors:', hasErrors, `(${hasErrors ? (result.data?.errors?.length || 0) + ' errors' : 'none'})`);
+      console.log('  - Has Successes:', hasSuccesses, `(${hasSuccesses ? (result.data?.responses?.length || 0) + ' succeeded' : 'none'})`);
+      console.log('  - Stats:', stats);
+
       if (result.success && !hasErrors) {
+        console.log('✅ SCENARIO: ALL SITES SUCCEEDED');
         // All sites succeeded
         $('.success-message').addClass('succeed');
         $('.success-message span').html('- Success!');  
@@ -192,6 +205,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         // Update each site in the list
         if (hasSuccesses) {
           result.data.responses.forEach((resp) => {
+            console.log('  ✓ Updating UI for site:', resp.site_id);
             const siteElement = $(`[data-site-id="${resp.site_id}"]`);
             siteElement.find('.site-loader').hide();
             siteElement.find('.site-status').html('<span class="badge bg-success">✓ Success</span>');
@@ -199,8 +213,10 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
           });
         }
         
+        // Reset form (nonce refresh happens in background)
         resetForm();
       } else if (result.success && isPartialSuccess) {
+        console.log('⚠️  SCENARIO: PARTIAL SUCCESS');
         // Partial success - some succeeded, some failed
         $('.success-message').addClass('partial');
         $('.success-message span').html('- Partial Success!');  
@@ -209,6 +225,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         // Update successful sites
         if (hasSuccesses) {
           result.data.responses.forEach((resp) => {
+            console.log('  ✓ Site succeeded:', resp.site_id);
             const siteElement = $(`[data-site-id="${resp.site_id}"]`);
             siteElement.find('.site-loader').hide();
             siteElement.find('.site-status').html('<span class="badge bg-success">✓ Success</span>');
@@ -219,6 +236,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         // Update failed sites with error messages
         if (hasErrors) {
           result.data.errors.forEach(err => {
+            console.log('  ✗ Site error:', err);
             // Extract site name from error message (format: "SiteName: error details")
             const errorParts = err.split(':');
             const siteName = errorParts[0].trim();
@@ -233,7 +251,11 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
             }
           });
         }
+
+        // Reset form (nonce refresh happens in background)
+        resetForm();
       } else if (!result.success && hasErrors) {
+        console.log('❌ SCENARIO: ALL SITES FAILED');
         // All sites failed or general error
         $('.success-message').addClass('failed');
         $('.success-message span').html('- Error!');  		  
@@ -242,6 +264,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         // Update all sites to failed status
         if (hasErrors) {
           result.data.errors.forEach(err => {
+            console.log('  ✗ Error details:', err);
             const errorParts = err.split(':');
             const siteName = errorParts[0].trim();
             const errorMsg = errorParts.slice(1).join(':').trim();
@@ -255,16 +278,25 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
           });
         }
       } else {
+        console.log('⚠️  SCENARIO: UNEXPECTED RESPONSE FORMAT');
         // Fallback for unexpected response format
         $('.success-message').addClass('failed');
         $('.success-message span').html('- Error!');  
         $('#post_event_status').text("An error occurred during processing");
         modalBody.append('<div class="alert alert-danger mt-3">An unexpected error occurred during processing.</div>');
       }
+      
+      console.log('===== EVENT CONTROLLER: FORM SUBMISSION COMPLETED =====\n');
     }
 
     // Helper: Handle AJAX request error
     function handleSubmissionError(xhr, status, error) {
+      console.log('❌ AJAX REQUEST ERROR HANDLER');
+      console.log('Status:', status);
+      console.log('Error:', error);
+      console.log('HTTP Code:', xhr.status);
+      console.log('Response Text:', xhr.responseText);
+      
       const modalBody = $('#sendingData .modal-body');
       
       isSubmitting = false;
@@ -272,6 +304,8 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       $('#submit_event').removeAttr('disabled');
       $('#post_event_status').text("Request failed");
       modalBody.append('<div class="alert alert-danger mt-3">Error: ' + error + '</div>');
+      
+      console.log('===== EVENT CONTROLLER: FORM SUBMISSION FAILED =====\n');
     }
 
     // Add a new objective field
@@ -289,12 +323,19 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
     });
 
     // Handle form submission
-    $('#submit_event').on('click', function(e) {
+    $('#ec-form').on('submit', function(e) {
       e.preventDefault();
-      e.stopImmediatePropagation();
+      
+      // TODO: TEMPORARY DEBUG LOG - Remove before final release
+      console.log('===== EVENT CONTROLLER: FORM SUBMISSION STARTED =====');
+      console.log('Timestamp:', new Date().toISOString());
 
       // Prevent duplicate submissions
-      if (isSubmitting) return;
+      if (isSubmitting) {
+        console.log('⚠️ SUBMISSION ALREADY IN PROGRESS - Preventing duplicate');
+        return;
+      }
+      console.log('✓ Submission lock acquired');
       isSubmitting = true;
 
       // Validate required fields
@@ -308,18 +349,16 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         'event_timezone',
         'event_location_type'
       ];
-      if (validateRequiredFields(requiredFields)) return;
+      console.log('📋 Validating required fields:', requiredFields);
+      if (validateRequiredFields(requiredFields)) {
+        console.log('❌ VALIDATION FAILED - Missing required fields');
+        isSubmitting = false;
+        return;
+      }
+      console.log('✓ All required fields validated');
 
       // Trigger TinyMCE save
       if (typeof tinyMCE !== 'undefined') tinyMCE.triggerSave();
-
-      // Prevent form submission on Enter key
-      $(window).keydown(function(event) {
-        if (event.keyCode === 13) {
-          event.preventDefault();
-          return false;
-        }
-      });
 
       // Collect form data
       const objectives = collectObjectives();
@@ -329,12 +368,25 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       const selectedSites = collectSelectedSites();
       const file = $('input[type=file]')[0].files[0];
 
+      console.log('📝 Form data collected:');
+      console.log('  - Event Title:', data.event_title);
+      console.log('  - Start Date:', data.meta_input.event_start_date);
+      console.log('  - End Date:', data.meta_input.event_end_date);
+      console.log('  - Start Time:', starttime);
+      console.log('  - End Time:', endtime);
+      console.log('  - Objectives:', objectives);
+      console.log('📍 Selected Sites:', selectedSites);
+      console.log('🖼️  Featured Image:', file ? file.name : 'None');
+
       // Ensure at least one site is selected
       if (selectedSites.length === 0) {
+        console.log('❌ ERROR: No sites selected');
+        isSubmitting = false;
         $('#show-form-errors').append('<div class="alert alert-danger mt-3">Please select at least one website before posting the event.</div>');
         $('#show-form-errors')[0].scrollIntoView({ behavior: 'smooth' });
         return;
       }
+      console.log('✓ Site selection validated -', selectedSites.length, 'site(s) selected');
 
       // Show loader and submit
       $('.loader').show();
@@ -375,14 +427,33 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         formData.append('file', file);
       }
 
+      console.log('📤 Preparing AJAX request...');
+      console.log('  - Ajax URL:', eventControllerData.ajax_url);
+      console.log('  - Action:', 'event_controller_submit_event');
+      console.log('  - Nonce:', eventControllerData.nonce);
+      console.log('  - Total sites to process:', selectedSites.length);
+      console.log('  - File attached:', !!file);
+      console.log('📡 Sending AJAX request...');
+
       $.ajax({
         url: eventControllerData.ajax_url,
         type: 'POST',
         data: formData,
         processData: false,
         contentType: false,
-        success: handleSubmissionSuccess,
-        error: handleSubmissionError
+        success: function(response) {
+          console.log('✓ AJAX REQUEST SUCCESSFUL - Response received');
+          console.log('Response:', response);
+          handleSubmissionSuccess(response);
+        },
+        error: function(xhr, status, error) {
+          console.log('❌ AJAX REQUEST FAILED');
+          console.log('  - Status:', status);
+          console.log('  - Error:', error);
+          console.log('  - HTTP Code:', xhr.status);
+          console.log('  - Response:', xhr.responseText);
+          handleSubmissionError(xhr, status, error);
+        }
       });
     });
 
