@@ -5,3 +5,9 @@
 form#ec-form {
   max-width: 1200px;
 }
+#ec-form input[type="checkbox"] {
+  float: none;
+}
+#ec-form .form-check label {
+  vertical-align: unset;
+}
