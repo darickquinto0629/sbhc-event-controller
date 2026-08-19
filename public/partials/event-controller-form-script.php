@@ -6,7 +6,6 @@ function event_submit_js() {
 (function($) {
   $(function() {
 
-let uploadErrors = []; // Reset error array globally
 let isSubmitting = false; // Flag to prevent duplicate submissions
 
     // Default start/end values
@@ -41,6 +40,18 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
     // Initialize time selects on page load
     populateTimeSelect('select[name="starttime"]');
     populateTimeSelect('select[name="endtime"]');
+
+    // Handle location type change (show/hide physical location fields)
+    $('select[name="event_location_type"]').on('change', function() {
+      if ($(this).val() === 'Physical') {
+        $('#physical-location-section').slideDown();
+        console.log('📍 Physical location section shown');
+      } else {
+        $('#physical-location-section').slideUp();
+        $('[data-required-if-physical="true"]').removeClass('is-invalid');
+        console.log('📍 Physical location section hidden');
+      }
+    });
 
     // Auto-update end time when start time changes (+1 hour)
     $('select[name="starttime"]').on('change', function() {
@@ -108,6 +119,34 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       return hasErrors;
     }
 
+    // Helper: Validate conditional physical location fields
+    function validatePhysicalLocationFields() {
+      if ($('select[name="event_location_type"]').val() !== 'Physical') {
+        return false; // No validation needed for Virtual
+      }
+
+      let hasErrors = false;
+      const requiredPhysicalFields = [
+        'location_address_1',
+        'location_city',
+        'location_state',
+        'location_postcode'
+      ];
+
+      $('[data-required-if-physical="true"]').removeClass('is-invalid');
+
+      requiredPhysicalFields.forEach(field => {
+        const input = $(`[name="${field}"]`);
+        if (!input.val().trim()) {
+          input.addClass('is-invalid');
+          hasErrors = true;
+          window.scrollTo(0, 0);
+        }
+      });
+
+      return hasErrors;
+    }
+
     // Helper: Collect objectives from form
     function collectObjectives() {
       const objectives = [];
@@ -120,12 +159,14 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
 
     // Helper: Collect all form fields into data object
     function collectEventData(objectives, starttime, endtime) {
+      const eventLocationType = $('select[name="event_location_type"]').val();
+      
       return {
         "event_title": $('input[name="event_title"]').val(),
         "presenter": $('input[name="presenter"]').val(),
         "ticket_price": $('input[name="ticketprice"]').val(),
         "event_location": $('input[name="eventlocation"]').val(),
-        "event_type": $('select[name="event_location_type"]').val(),
+        "event_type": eventLocationType,
         "summary": $('textarea#summary').val(),
         "short_summary": $('textarea#short_summary').val(),
         "contact_name": $('input[name="contact_name"]').val(),
@@ -133,6 +174,12 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         "contact_address": $('input[name="contact_address"]').val(),
         "registration_link": $('input[name="registration_link"]').val(),
         "objectives": objectives,
+        "location_name": $('input[name="location_name"]').val() || '',
+        "location_address_1": $('input[name="location_address_1"]').val() || '',
+        "location_address_2": $('input[name="location_address_2"]').val() || '',
+        "location_city": $('input[name="location_city"]').val() || '',
+        "location_state": $('input[name="location_state"]').val() || '',
+        "location_postcode": $('input[name="location_postcode"]').val() || '',
         "meta_input": {
           "event_start_time": starttime,
           "event_end_time": endtime,
@@ -143,7 +190,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
           "event_start_local": startdate + ' ' + starttime,
           "event_end_local": enddate + ' ' + endtime,
           "event_time_zone": $('select[name="event_timezone"]').val(),
-          "event_location_type": $('select[name="event_location_type"]').val(),
+          "event_location_type": eventLocationType,
           "event_location_url": $('input[name="registration_link"]').val(),
           "event_location_url_text": "Register Here"
         }
@@ -166,6 +213,8 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       tinymce.get('summary')?.setContent('');
       tinymce.get('short_summary')?.setContent('');
       $('.is-invalid').removeClass('is-invalid');
+      // Hide physical location section after reset
+      $('#physical-location-section').slideUp();
     }
 
     // Helper: Handle successful AJAX response
@@ -355,6 +404,14 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         isSubmitting = false;
         return;
       }
+      
+      // Validate physical location fields if Physical is selected
+      if (validatePhysicalLocationFields()) {
+        console.log('❌ VALIDATION FAILED - Missing physical location fields');
+        isSubmitting = false;
+        return;
+      }
+      
       console.log('✓ All required fields validated');
 
       // Trigger TinyMCE save
@@ -391,6 +448,10 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       // Show loader and submit
       $('.loader').show();
       $('.success span').hide();
+      
+      // CRITICAL: Clear modal body completely before new submission
+      $('#sendingData .modal-body').empty();
+      $('#post_event_status').text('Posting Event');
       
       // Build site list with loading icons
       let sitesHTML = '<div class="sites-processing mt-4"><h5>Processing Sites:</h5><div class="sites-list">';

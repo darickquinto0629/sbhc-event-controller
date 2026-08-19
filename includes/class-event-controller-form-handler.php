@@ -749,6 +749,17 @@ class Event_Controller_Form_Handler {
 		// Extract meta_input if it exists
 		$meta = isset( $event_data['meta_input'] ) ? $event_data['meta_input'] : array();
 		
+		// Build location group field for ACF
+		$location_group = array(
+			'location_name' => $event_data['location_name'] ?? '',
+			'country'       => 'United States',
+			'address_1'     => $event_data['location_address_1'] ?? '',
+			'address_2'     => $event_data['location_address_2'] ?? '',
+			'city'          => $event_data['location_city'] ?? '',
+			'state'         => $event_data['location_state'] ?? '',
+			'zip_code'      => $event_data['location_postcode'] ?? '',
+		);
+		
 		// Build EM API payload
 		$em_payload = array(
 			'event_name'           => $event_data['event_title'] ?? '',
@@ -768,13 +779,7 @@ class Event_Controller_Form_Handler {
 			'event_private'        => 0,
 			'featured_image'       => $event_data['featured_media'] ?? 0,
 			'location_id'          => 0,
-			'location_name'        => $event_data['event_location'] ?? '',
-			'location_address'     => '',
-			'location_town'        => '',
-			'location_state'       => '',
-			'location_postcode'    => '',
 			'location_region'      => '',
-			'location_country'     => 'US',
 			'location_latitude'    => 0,
 			'location_longitude'   => 0,
 			'event_categories'     => array(),
@@ -794,9 +799,12 @@ class Event_Controller_Form_Handler {
 			'contact_address'      => $event_data['contact_address'] ?? '',
 			'registration_link'    => $event_data['registration_link'] ?? '',
 			'objectives'           => $event_data['objectives'] ?? array(),
+			
+			// Location as ACF group field
+			'location'             => $location_group,
 		);
 		
-		error_log('EVENT_CONTROLLER: Building EM API payload with featured_image: ' . json_encode($em_payload['featured_image']));
+		error_log('EVENT_CONTROLLER: Building payload with location group: ' . json_encode( $location_group ));
 		error_log('EVENT_CONTROLLER: Transformed payload: ' . json_encode( $em_payload ));
 		return $em_payload;
 	}

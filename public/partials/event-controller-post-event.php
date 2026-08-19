@@ -208,6 +208,56 @@ class Event_Controller_Form {
       <option value="Physical">Physical</option>
     </select>
   </div>
+
+  <!-- Physical Location Fields (shown only when Physical is selected) -->
+  <div id="physical-location-section" class="col-md-12" style="display: none;">
+    <hr>
+    <h5 class="mb-3">Physical Location Details</h5>
+
+    <!-- Row 1: Location Name, Address Line 1 -->
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label for="location_name">Location Name <span class="text-muted">(Optional)</span></label>
+        <input type="text" name="location_name" class="form-control">
+      </div>
+
+      <div class="col-md-6 mb-3">
+        <label for="location_address_1">Address Line 1 <span class="text-danger">*</span></label>
+        <input type="text" name="location_address_1" class="form-control" data-required-if-physical="true">
+        <div class="invalid-feedback">Address required</div>
+      </div>
+    </div>
+
+    <!-- Row 2: Address Line 2, City -->
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label for="location_address_2">Address Line 2 <span class="text-muted">(Optional)</span></label>
+        <input type="text" name="location_address_2" class="form-control">
+      </div>
+
+      <div class="col-md-6 mb-3">
+        <label for="location_city">City <span class="text-danger">*</span></label>
+        <input type="text" name="location_city" class="form-control" data-required-if-physical="true">
+        <div class="invalid-feedback">City required</div>
+      </div>
+    </div>
+
+    <!-- Row 3: State, Zip -->
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label for="location_state">State <span class="text-danger">*</span></label>
+        <input type="text" name="location_state" class="form-control" data-required-if-physical="true">
+        <div class="invalid-feedback">State required</div>
+      </div>
+
+      <div class="col-md-6 mb-3">
+        <label for="location_postcode">Zip <span class="text-danger">*</span></label>
+        <input type="text" name="location_postcode" class="form-control" data-required-if-physical="true">
+        <div class="invalid-feedback">Zip required</div>
+      </div>
+    </div>
+    <hr>
+  </div>
 	
    <div class="col-md-12 mb-3"> 
 	    <label for="summary" class="">Summary</label>

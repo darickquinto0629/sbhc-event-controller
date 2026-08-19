@@ -2,6 +2,94 @@
 
 Technical documentation of fixes, architecture decisions, and debugging context.
 
+## Fixed: Form State Management - Modal Clearing and Location Section Visibility (2026-08-19)
+
+**Issues:**
+
+1. Modal dialog retained "All sites processed successfully" message from previous submission, mixing with new submission status
+2. Physical location section remained visible after form reset following successful submission
+3. Unused `uploadErrors` variable in form script
+
+**Root Cause Analysis - Modal Not Clearing:**
+
+When form submitted multiple times consecutively, the modal's `.modal-body` element retained HTML from previous submission. New site list was appended without clearing old content, resulting in mixed messages.
+
+Solution: Clear modal body and reset title at start of submission:
+
+```javascript
+$("#sendingData .modal-body").empty();
+$("#post_event_status").text("Posting Event");
+```
+
+**Root Cause Analysis - Location Section Not Hiding:**
+
+After successful submission, `resetForm()` called `$form[0].reset()` to clear all input values. This correctly reset the event_location_type select to "Virtual" value, but the change event listener that hides the physical location section never fired.
+
+Programmatic form resets do not trigger change event listeners - only user-initiated changes do. Location section remained visible because hide logic only existed in change handler:
+
+```javascript
+$("#event_location_type").on("change", function () {
+  // This handler never fires on programmatic reset
+  if (value === "Physical") showSection();
+  else hideSection();
+});
+```
+
+Solution: Add explicit hide call to `resetForm()` function:
+
+```javascript
+function resetForm() {
+  $form[0].reset();
+  $("#physical-location-section").slideUp();
+  // ... other reset logic
+}
+```
+
+**Code Cleanup:**
+
+Variable `uploadErrors = []` was declared at top of script but never referenced or used in event submission workflow. Removed to reduce code clutter and avoid confusion about error handling.
+
+**ACF Location Structure Implementation:**
+
+As part of this session, location data was restructured from flat form fields to nested ACF group format:
+
+Form input fields:
+
+- location_name (text)
+- location_address_1, location_address_2 (text)
+- location_city, location_state, location_postcode (text)
+
+Transformed in backend to ACF group structure:
+
+```php
+$location_group = array(
+    'location_name' => $event_data['location_name'] ?? '',
+    'country'       => 'United States',
+    'address_1'     => $event_data['location_address_1'] ?? '',
+    'address_2'     => $event_data['location_address_2'] ?? '',
+    'city'          => $event_data['location_city'] ?? '',
+    'state'         => $event_data['location_state'] ?? '',
+    'zip_code'      => $event_data['location_postcode'] ?? '',
+);
+```
+
+Included in em_api_event_save payload sent to remote sites. Remote site hook processes this nested structure and maps to ACF group fields.
+
+**Files Modified:**
+
+1. `includes/class-event-controller-form-handler.php` - Location group structure transformation
+2. `public/partials/event-controller-form-script.php` - Modal clearing, location section hiding, unused variable cleanup
+3. `public/partials/event-controller-post-event.php` - Physical location form section (from prior work)
+
+**Testing:**
+
+- Form submission with physical location selected: Fields show correctly, hide when type changed to Virtual
+- Consecutive form submissions: Modal clears and title resets properly
+- Form reset after successful submission: Location section hides, form ready for next submission
+- Data payload verified: Location data structured as ACF group in remote API request
+
+---
+
 ## Fixed: AJAX Hanging on Form Submission (2026-08-05)
 
 **Issue:** AJAX response hung indefinitely after form submission to 7 remote WordPress sites. Events successfully posted to all sites but browser never received response.

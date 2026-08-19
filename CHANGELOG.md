@@ -2,6 +2,53 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.2.2] - 2026-08-19
+
+### Fixed
+
+#### **Form State Management - Modal Clearing Between Submissions**
+
+- Fixed issue where modal dialog retained success message from previous form submission
+- Modal body now explicitly cleared at start of each new form submission
+- Modal title reset to "Posting Event" before building new site processing list
+- Prevents confusing UI state where old and new status messages mixed together
+
+#### **Form Reset - Location Section Visibility**
+
+- Fixed issue where physical location section remained visible after form reset following successful submission
+- Root cause: jQuery form reset does not trigger change event listeners
+- Solution: Added explicit hide logic to `resetForm()` function
+- Location section now properly hides when form resets and event type reverts to Virtual
+- Ensures clean UI state for consecutive event submissions
+
+### Changed
+
+#### **Event Location Data Structure - ACF Group Format**
+
+- Restructured location data transmission from flat fields to nested ACF group structure
+- Remote site Events Manager API now receives location as object:
+  ```javascript
+  {
+    location_name: string,
+    country: 'United States',
+    address_1: string,
+    address_2: string,
+    city: string,
+    state: string,
+    zip_code: string
+  }
+  ```
+- Supports ACF location group fields on remote sites with proper hierarchy
+- Backend `transform_to_em_api_schema()` now builds location_group object
+- em_api_event_save hook on remote sites receives structured data for ACF field storage
+
+#### **Code Cleanup**
+
+- Removed unused `uploadErrors` variable from form submission script
+- Variable was declared but never referenced in event submission workflow
+
+---
+
 ## [1.2.1] - 2026-08-05
 
 ### Fixed

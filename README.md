@@ -2,7 +2,7 @@
 
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue)
-![Version](https://img.shields.io/badge/version-1.0.2-brightgreen)
+![Version](https://img.shields.io/badge/version-1.2.2-brightgreen)
 
 Centralize event management and syndicate events to multiple remote WordPress sites in real-time with a single form submission.
 
@@ -74,23 +74,44 @@ cd /path/to/wordpress/wp-content/plugins
 
 ### Setup Remote Sites
 
-1. Go to the plugin settings (if implemented in your installation)
-2. Add remote WordPress site URLs and credentials
-3. Configure application passwords for each remote site
+Remote site credentials are stored in ACF and retrieved securely during event submission.
+
+1. Configure ACF field group on the main site (see **ACF Field Setup** below)
+2. Add remote WordPress site URLs and credentials to the ACF repeater
+3. Each remote site must have:
+   - Events Manager plugin installed and activated
+   - Application password created for the event submission user
+   - Events Manager REST API enabled (`/wp-json/events-manager/v1/events`)
 4. Test the connection to each remote site
 
 ### ACF Field Setup (Required)
 
-You must configure an ACF field group with the following repeater field:
+You must configure an ACF field group to store remote site credentials:
 
 **Field Group:** `site_details` (location: Options Page)
 **Type:** Repeater
 **Subfields:**
 
 - `site_name` (Text) - Name of the remote site
-- `site_url` (URL) - Remote WordPress URL
-- `application_password_name` (Text) - Username for authentication
-- `application_password` (Password) - Application password or token
+- `site_url` (URL) - Remote WordPress URL (e.g., `https://example.com`)
+- `application_password_name` (Text) - Username for Basic Auth
+- `application_password` (Password) - Application password or API token
+
+### Remote Site ACF Setup (Required)
+
+Each remote site must have an ACF field group to receive location data:
+
+**Field Group:** `event_location` (or custom name, mapped in Events Manager)
+**Type:** Group
+**Subfields:**
+
+- `location_name` (Text)
+- `country` (Text)
+- `address_1` (Text)
+- `address_2` (Text)
+- `city` (Text)
+- `state` (Text)
+- `zip_code` (Text)
 
 ## Usage
 
@@ -123,7 +144,7 @@ The form will only display for administrators.
 
 ### Architecture
 
-Event Controller uses a secure client-server architecture:
+Event Controller uses a secure client-server architecture for multi-site event distribution:
 
 **Frontend Component** (`public/partials/event-controller-form-script.php`)
 
@@ -135,8 +156,23 @@ Event Controller uses a secure client-server architecture:
 
 - Processes AJAX requests with nonce verification
 - Retrieves site credentials securely from ACF
-- Manages multi-site event distribution
-- Authenticates to remote sites via Basic Auth (application passwords)
+- Uploads featured images to each remote site
+- Submits events to remote Events Manager REST API endpoint
+- Authenticates using Basic Auth with application passwords
+- Implements idempotency key to prevent duplicate submissions
+- Caches results to handle nginx proxy retries
+
+### Remote API Endpoint
+
+Events are submitted to the following REST API endpoint on each remote site:
+
+```
+POST /wp-json/events-manager/v1/events
+```
+
+**Authentication:** Basic Auth (username + application password)
+
+**Content-Type:** `application/json`
 
 ### Security Features
 
@@ -149,44 +185,69 @@ Event Controller uses a secure client-server architecture:
 ✅ **Authentication & Verification**
 
 - WordPress nonce verification on all AJAX endpoints
-- Basic authentication for inter-site REST API calls
+- Basic authentication (Base64 encoded) for Events Manager API calls
 - Application password support for remote site access
 
-✅ **Data Validation**
+✅ **Data Validation & Idempotency**
 
 - Client-side validation for user experience
 - Server-side validation for security
 - HTTPS URL validation and SSL certificate verification
 - Input sanitization on all form fields
+- Idempotency key (SHA256 hash) prevents duplicate submissions
+- Retry detection and result caching handle nginx proxy timeouts
 
-The plugin communicates with remote WordPress sites using the REST API and Application Passwords for secure authentication.
+### Event Data Format (Events Manager API)
 
-### Event Data Format
-
-Events are submitted with the following data structure:
+Events are submitted to remote sites with the following structure:
 
 ```php
 [
-    'event_title'          => string,
-    'event_location'       => string,
-    'startdate'            => string,
-    'enddate'              => string,
-    'starttime'            => string,
-    'endtime'              => string,
-    'event_timezone'       => string,
-    'summary'              => string,
-    'short_summary'        => string,
-    'objectives'           => array,
-    'presenter'            => string,
-    'ticketprice'          => string,
-    'contact_name'         => string,
-    'contact_number'       => string,
-    'contact_address'      => string,
-    'registration_link'    => string,
-    'event_location_type'  => string,
-    'featured_image'       => file,
+    'event_name'          => string,           // Event title
+    'event_start_date'    => string,           // YYYY-MM-DD
+    'event_end_date'      => string,           // YYYY-MM-DD
+    'event_start_time'    => string,           // HH:MM:SS
+    'event_end_time'      => string,           // HH:MM:SS
+    'event_timezone'      => string,           // US timezone
+    'event_type'          => 'single',         // Event type
+    'post_status'         => 'publish',        // Always publish
+    'featured_image'      => integer,          // Media ID on remote site
+
+    // Custom ACF fields
+    'summary'             => string,
+    'short_summary'       => string,
+    'presenter'           => string,
+    'ticket_price'        => string,
+    'event_location_type' => string,           // Virtual, Physical, Hybrid
+    'contact_name'        => string,
+    'contact_number'      => string,
+    'contact_address'     => string,
+    'registration_link'   => string,
+    'objectives'          => array,
+
+    // Location as ACF group field
+    'location' => [
+        'location_name' => string,
+        'country'       => 'United States',
+        'address_1'     => string,
+        'address_2'     => string,
+        'city'          => string,
+        'state'         => string,
+        'zip_code'      => string,
+    ]
 ]
 ```
+
+### Event Processing on Remote Sites
+
+When an event is submitted to a remote site:
+
+1. **Media Upload** - Featured image uploaded first, media ID returned
+2. **Event Creation** - Event created via Events Manager REST API
+3. **ACF Field Storage** - Custom fields stored in ACF field groups
+4. **Location Data** - Location group data maps to remote site's location field group
+
+The `em_api_event_save` hook on remote sites processes the submission and stores all data.
 
 ## Changelog
 
