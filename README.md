@@ -2,28 +2,37 @@
 
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue)
-![Version](https://img.shields.io/badge/version-1.2.2-brightgreen)
+![Version](https://img.shields.io/badge/version-1.8.0-brightgreen)
 
-Centralize event management and syndicate events to multiple remote WordPress sites in real-time with a single form submission.
+Centralize event management and reliably syndicate events to dozens of remote WordPress sites through a durable, retry-aware background job queue.
 
 ## Overview
 
-Event Controller is a powerful WordPress plugin designed for multi-site event management. It enables administrators to create events and automatically distribute them across multiple remote WordPress installations with a single submission. Perfect for networks, franchises, and organizations managing events across several websites.
+Event Controller is a WordPress plugin for multi-site event management, built to scale to ~50 remote sites per submission. Administrators create an event once from a dedicated WordPress admin screen; the plugin creates a durable job, hands each remote site off to a background worker, and shows live per-site progress - all independent of whether the admin's browser stays open. Perfect for networks, franchises, and organizations managing events across many websites.
+
+**This is a rebuilt architecture.** The plugin originally submitted events synchronously (one AJAX request, in-process parallel cURL, no retry) directly from a front-end shortcode. That approach could not reliably handle dozens of sites, partial failures, or interrupted requests. It has been replaced with a queued, worker-driven pipeline - see [Architecture](#architecture) below and `EVENT-CONTROLLER-ARCHITECTURE-REVIEW.md` for the full technical review this rebuild was based on.
 
 ## Features
 
-✨ **Multi-Site Event Distribution**
+✨ **Reliable Multi-Site Event Distribution**
 
-- Publish events to multiple remote WordPress sites simultaneously
-- Streamlined single-form submission process
-- Real-time event synchronization
+- Submits events to remote WordPress sites through a persistent job queue, not a single long-running request
+- Survives closing the browser, a proxy timeout, or a PHP worker crash mid-delivery - the job keeps processing in the background
+- Automatic retry with backoff for transient failures, and a per-site circuit breaker so one dead site doesn't block delivery to the rest
+- Ambiguous outcomes (e.g. a timeout where the remote site may have already processed the request) are reconciled with the remote site before ever retrying, to avoid creating duplicate events
+
+📊 **Live Job Monitoring**
+
+- Admin screen showing overall progress, per-site status, attempt counts, remote event IDs, and error detail, updating automatically
+- "Retry failed sites" and "Cancel job" actions
+- Structured, queryable logs per job/site instead of a flat server log
 
 📋 **Comprehensive Event Management**
 
 - Event title, date, time, and location management
 - Timezone support across US regions and territories
 - Featured image upload capability
-- Event type and location type selection (Virtual/Physical/Hybrid)
+- Event type and location type selection (Virtual/Physical)
 
 📝 **Rich Event Details**
 
@@ -34,24 +43,22 @@ Event Controller is a powerful WordPress plugin designed for multi-site event ma
 
 🔒 **Security & Performance**
 
-- Admin-only access control
-- AJAX nonce verification ready
-- Class-based architecture for better performance
-- Scripts enqueued only when needed
+- Admin-only access control (capability-gated, not just nonce-gated)
+- REST API authentication via WordPress' built-in cookie + nonce system
+- Standalone - Action Scheduler (the background job engine) is bundled inside the plugin; no WooCommerce or other plugin dependency required
 
 🎨 **Professional UI**
 
 - Bootstrap 5 integration
 - Date range picker for easy date selection
 - TinyMCE WYSIWYG editor for rich text content
-- Modal workflows for site selection and submission status
 
 ## Requirements
 
 - WordPress 5.0 or higher
-- PHP 7.4 or higher
-- cURL enabled (for remote API calls)
+- PHP 7.2 or higher
 - ACF (Advanced Custom Fields) Pro for `site_details` field group configuration
+- No external dependencies required at runtime - Action Scheduler is bundled inside the plugin (`includes/vendor/action-scheduler/`)
 
 ## Installation
 
@@ -117,62 +124,105 @@ Each remote site must have an ACF field group to receive location data:
 
 ### Creating Events
 
-1. Navigate to the page where the `[events-form]` shortcode is placed
-2. **Select Website(s):** Click "Select Site" and choose which remote sites to publish to
-3. **Upload Featured Image:** Add a featured image for the event
+Event submission is done from the WordPress admin, not a front-end page.
+
+1. In wp-admin, go to **Event Controller > Post Event**
+2. **Select Website(s):** Check which remote sites to publish to
+3. **Upload Featured Image:** Add a featured image for the event (optional)
 4. **Fill Event Details:** Complete all required fields:
    - Event Title (required)
-   - Event Location (required)
    - Start Date & Time (required)
    - End Date & Time (required)
    - Event Timezone (required)
+   - Event Location Type (Virtual/Physical) - Physical requires an address
 5. **Add Learning Objectives:** Click "Add Objective" to add multiple learning objectives
 6. **Fill Contact Information:** Provide event contact details
-7. **Post Event:** Click the "Post Event" button
+7. **Post Event:** Submitting takes you straight to a live job status page - no need to keep the tab open while delivery finishes
 
-### Shortcode
+### Monitoring Jobs
 
-Place the following shortcode on any page or post:
+Go to **Event Controller > Jobs** to see recent submissions, or open a specific job to see:
+
+- Overall progress bar and succeeded/processing/retrying/failed counts
+- A per-site table with status, attempt count, remote event ID, next retry time, and error detail
+- **Retry failed sites** - re-queues only the sites that failed
+- **Cancel job** - stops any sites still in progress
+
+### Legacy Shortcode
+
+The original `[events-form]` front-end shortcode is disabled (registration commented out, not deleted) as of this rebuild. It is kept in the codebase only as a rollback path and is not part of normal usage.
+
+## Architecture
+
+### Overview
+
+Event Controller uses a durable job queue rather than a single synchronous request:
 
 ```
-[events-form]
+Admin submits event (wp-admin)
+        |
+        v
+POST /wp-json/event-controller/v1/jobs   <- returns immediately with a job_id
+        |
+        v
+One job row + one "site job" row per selected site (durable, MySQL)
+        |
+        v
+Action Scheduler dispatches one background action per site
+        |
+        v
+EC_Delivery_Worker: upload media (if any) -> post event -> mark complete/failed
+        |
+        v
+Failures are classified and either retried with backoff, deferred behind a
+per-site circuit breaker, or (for ambiguous outcomes) reconciled against the
+remote site before ever retrying
+        |
+        v
+Admin "Jobs" screen polls job status and shows live per-site progress
 ```
 
-The form will only display for administrators.
+The admin's browser only needs to stay open long enough to see the job get created - delivery to all selected sites happens in the background regardless of whether the tab is closed afterward.
 
-## API Integration
+### Key Components
 
-### Architecture
+| Component | Responsibility |
+|---|---|
+| `EC_Job_Manager` | Creates jobs, de-duplicates identical submissions, persists uploaded media, rolls up job status |
+| `EC_Site_Registry` | Loads remote site credentials from the ACF `site_details` repeater |
+| `EC_Delivery_Worker` | Background worker: claims one site job per Action Scheduler action, runs the media-then-event delivery, enforces an execution time/memory budget |
+| `EC_Events_API_Client` | Single-site HTTP client for the Events Manager media/event endpoints |
+| `EC_Payload_Transformer` | Builds the Events Manager API payload from the submitted event data |
+| `EC_Error_Classifier` | Classifies a delivery failure as permanent, retryable, or ambiguous |
+| `EC_Retry_Policy` | Exponential backoff with jitter (up to 5 attempts) |
+| `EC_Circuit_Breaker` | Temporarily stops attempting delivery to a site that's failing repeatedly |
+| `EC_Reconciler` | Checks with the remote site before retrying an ambiguous outcome, to avoid creating a duplicate event |
+| `EC_Logger` | Structured, per-job/per-site logging with level gating and automatic retention purge |
+| `EC_REST_Controller` | REST API: create/list/get/retry/cancel jobs |
 
-Event Controller uses a secure client-server architecture for multi-site event distribution:
+### REST API
 
-**Frontend Component** (`public/partials/event-controller-form-script.php`)
+All routes require the `manage_options` capability and WordPress' built-in `X-WP-Nonce` authentication.
 
-- Handles form UI and client-side validation
-- Submits form data via AJAX to the server
-- Never exposes sensitive credentials or site details
-
-**Backend Component** (`includes/class-event-controller-form-handler.php`)
-
-- Processes AJAX requests with nonce verification
-- Retrieves site credentials securely from ACF
-- Uploads featured images to each remote site
-- Submits events to remote Events Manager REST API endpoint
-- Authenticates using Basic Auth with application passwords
-- Implements idempotency key to prevent duplicate submissions
-- Caches results to handle nginx proxy retries
+| Method | Route | Purpose |
+|---|---|---|
+| `POST` | `/wp-json/event-controller/v1/jobs` | Create a job (submits the event for delivery) |
+| `GET` | `/wp-json/event-controller/v1/jobs` | List recent jobs |
+| `GET` | `/wp-json/event-controller/v1/jobs/{id}` | Get a job's status and per-site detail |
+| `POST` | `/wp-json/event-controller/v1/jobs/{id}/retry` | Re-queue only the sites that failed |
+| `POST` | `/wp-json/event-controller/v1/jobs/{id}/cancel` | Cancel a job still in progress |
 
 ### Remote API Endpoint
 
-Events are submitted to the following REST API endpoint on each remote site:
+Each remote site receives requests at:
 
 ```
+POST /wp-json/events-manager/v1/media    (if a featured image is attached)
 POST /wp-json/events-manager/v1/events
 ```
 
 **Authentication:** Basic Auth (username + application password)
-
-**Content-Type:** `application/json`
+**Content-Type:** `application/json` (event) / `multipart/form-data` (media)
 
 ### Security Features
 
@@ -180,22 +230,19 @@ POST /wp-json/events-manager/v1/events
 
 - Site URLs, usernames, and application passwords are never exposed in client-side JavaScript
 - All sensitive data retrieved and managed server-side only
-- Credentials never appear in browser dev tools or page source
+- Credentials are never written to logs, even at the most verbose logging level
 
 ✅ **Authentication & Verification**
 
-- WordPress nonce verification on all AJAX endpoints
+- REST endpoints require the `manage_options` capability, checked in addition to WordPress' built-in nonce verification
 - Basic authentication (Base64 encoded) for Events Manager API calls
-- Application password support for remote site access
 
-✅ **Data Validation & Idempotency**
+✅ **Data Validation, Idempotency & Duplicate Prevention**
 
-- Client-side validation for user experience
-- Server-side validation for security
+- Client-side validation for user experience, server-side validation for security
 - HTTPS URL validation and SSL certificate verification
-- Input sanitization on all form fields
-- Idempotency key (SHA256 hash) prevents duplicate submissions
-- Retry detection and result caching handle nginx proxy timeouts
+- A payload-derived idempotency key means submitting the same event twice returns the existing job instead of creating a duplicate
+- Ambiguous delivery outcomes are reconciled with the remote site before any retry, rather than assumed safe to resend
 
 ### Event Data Format (Events Manager API)
 
@@ -251,68 +298,12 @@ The `em_api_event_save` hook on remote sites processes the submission and stores
 
 ## Changelog
 
-### Version 1.0.2 - July 4, 2026
+See [CHANGELOG.md](CHANGELOG.md) for full version history. Summary of the major rebuild:
 
-**Added**
-
-- New Frontend Form Script (`public/partials/event-controller-form-script.php`)
-  - Complete JavaScript form handling with validation
-  - Date/time range picker integration
-  - TinyMCE editor for event descriptions
-  - Dynamic objective field management
-  - Real-time form validation and error display
-
-- New Backend Form Handler (`includes/class-event-controller-form-handler.php`)
-  - Dedicated AJAX endpoint for secure form submission
-  - Multi-site event distribution capability
-  - Remote media upload functionality
-  - Remote event posting via custom REST endpoints
-
-**Changed**
-
-- Improved HTTP status code handling to accept both 200 (OK) and 201 (Created) responses from remote APIs
-- Enhanced security architecture with server-side credential management
-
-**Fixed**
-
-- Fixed form script parsing errors
-- Fixed "Server returned status 201" errors on successful remote POST requests
-- Improved code formatting and structure
-
-**Security Improvements**
-
-- ⚠️ **Critical**: Refactored credential management to server-side only
-  - Site credentials no longer exposed in client-side JavaScript
-  - All authentication handled securely via AJAX with nonce verification
-
-### Version 1.0.1 - July 2, 2026
-
-**Added**
-
-- Security nonce generation for AJAX requests
-
-**Changed**
-
-- Refactored Event Form Handler into class-based architecture
-- Improved code organization and separation of concerns
-- Enhanced plugin description and documentation
-
-**Fixed**
-
-- Undefined `$args` variable in `wp_localize_script()` call
-- Removed unused ACF variables
-- Improved output escaping in ACF loops
-- Cleaned up redundant buffer operations
-
-**Improved**
-
-- Performance: Scripts now only enqueue when shortcode is used
-- Better WordPress best practices adherence
-- Dynamic modal generation from ACF data
-
-### Version 1.0.0 - Initial Release
-
-- Initial plugin release with event posting functionality
+- **1.3.0 - 1.6.0:** Introduced the durable job queue, background delivery worker (Action Scheduler, bundled standalone), real media/event delivery, and error classification/retry/circuit breaker/reconciliation
+- **1.7.0:** Moved event submission from the front-end shortcode to a WordPress admin screen with a live per-site progress view
+- **1.8.0:** Structured, queryable logging with automatic retention
+- **1.0.x - 1.2.x:** Original synchronous, front-end shortcode-based implementation (superseded by the rebuild above)
 
 ## Troubleshooting
 
@@ -347,23 +338,36 @@ The `em_api_event_save` hook on remote sites processes the submission and stores
 
 ```
 event-controller/
-├── admin/                 # Admin-specific functionality
-├── includes/              # Core plugin classes
-├── public/                # Public-facing functionality
-│   └── partials/          # Form and display templates
-├── languages/             # Translation files
-├── event-controller.php   # Main plugin file
-├── CHANGELOG.md          # Version history
-├── LICENSE.txt           # GPL-2.0+ License
-└── README.md             # This file
+├── admin/                  # Admin UI: Post Event form, Jobs list/detail
+│   └── partials/
+├── includes/
+│   ├── api/                # EC_Payload_Transformer, EC_Events_API_Client
+│   ├── db/                 # EC_Schema (ec_jobs, ec_site_jobs, ec_job_log)
+│   ├── jobs/                # EC_Job_Manager, EC_Delivery_Worker, EC_Site_Job_Repository
+│   ├── retry/               # EC_Error_Classifier, EC_Retry_Policy, EC_Circuit_Breaker, EC_Reconciler
+│   ├── rest/                # EC_REST_Controller
+│   ├── vendor/action-scheduler/  # Bundled Action Scheduler (standalone, no Composer needed at runtime)
+│   ├── class-ec-logger.php
+│   ├── class-ec-site-registry.php
+│   └── class-event-controller-form-handler.php  # Legacy AJAX handler, kept dormant as a rollback path
+├── public/                 # Legacy front-end shortcode (disabled, kept for rollback)
+│   └── partials/
+├── languages/               # Translation files
+├── event-controller.php    # Main plugin file
+├── EVENT-CONTROLLER-ARCHITECTURE-REVIEW.md  # The technical review this rebuild was based on
+├── CHANGELOG.md             # Version history
+├── DEVELOPMENT_LOG.md       # Detailed technical notes per development phase
+├── LICENSE.txt              # GPL-2.0+ License
+└── README.md                # This file
 ```
 
 ### Key Classes
 
 - `Event_Controller` - Main plugin class
 - `Event_Controller_Loader` - Hook management
-- `Event_Controller_Public` - Public-facing hooks
-- `Event_Controller_Form` - Event form handler and submission
+- `Event_Controller_Admin` - Registers the admin menu, enqueues assets, renders the Post Event/Jobs pages
+- `EC_Job_Manager` / `EC_Delivery_Worker` - Job creation and background delivery
+- `EC_REST_Controller` - REST API for job create/list/get/retry/cancel
 
 ## Contributing
 

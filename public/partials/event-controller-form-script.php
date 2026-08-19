@@ -502,6 +502,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         data: formData,
         processData: false,
         contentType: false,
+        timeout: 300000, // 5 min - covers today's worst-case processing window; drop once the job-queue pipeline replaces this call
         success: function(response) {
           console.log('✓ AJAX REQUEST SUCCESSFUL - Response received');
           console.log('Response:', response);

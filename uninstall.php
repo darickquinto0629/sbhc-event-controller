@@ -29,3 +29,20 @@
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
+
+require_once plugin_dir_path( __FILE__ ) . 'includes/db/class-ec-schema.php';
+EC_Schema::drop_tables();
+
+global $wpdb;
+$upload_dir = wp_upload_dir();
+$ec_private_dir = trailingslashit( $upload_dir['basedir'] ) . 'ec-private';
+
+if ( is_dir( $ec_private_dir ) ) {
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	WP_Filesystem();
+	global $wp_filesystem;
+	if ( $wp_filesystem ) {
+		$wp_filesystem->delete( $ec_private_dir, true );
+	}
+}
+

@@ -31,6 +31,9 @@ class Event_Controller_Activator {
 	 */
 	public static function activate() {
 
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/db/class-ec-schema.php';
+		EC_Schema::install();
+
 	}
 
 }

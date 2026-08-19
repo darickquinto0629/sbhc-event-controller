@@ -55,25 +55,90 @@ class Event_Controller_Admin {
 	}
 
 	/**
+	 * Register the "Event Controller" admin menu: Post Event (the form,
+	 * moved here from the front-end [events-form] shortcode) and Jobs
+	 * (list + per-job progress detail). Phase 5.
+	 *
+	 * @since 1.7.0
+	 */
+	public function register_admin_menu() {
+
+		add_menu_page(
+			'Event Controller',
+			'Event Controller',
+			'manage_options',
+			'event-controller',
+			array( $this, 'render_post_event_page' ),
+			'dashicons-calendar-alt',
+			30
+		);
+
+		add_submenu_page(
+			'event-controller',
+			'Post Event',
+			'Post Event',
+			'manage_options',
+			'event-controller',
+			array( $this, 'render_post_event_page' )
+		);
+
+		add_submenu_page(
+			'event-controller',
+			'Jobs',
+			'Jobs',
+			'manage_options',
+			'event-controller-jobs',
+			array( $this, 'render_jobs_page' )
+		);
+
+	}
+
+	/**
+	 * @since 1.7.0
+	 */
+	public function render_post_event_page() {
+		add_action( 'admin_footer', array( $this, 'print_post_event_script' ), 100 );
+		require plugin_dir_path( __FILE__ ) . 'partials/event-controller-admin-post-event.php';
+	}
+
+	/**
+	 * @since 1.7.0
+	 */
+	public function render_jobs_page() {
+		if ( isset( $_GET['job_id'] ) ) {
+			add_action( 'admin_footer', array( $this, 'print_job_detail_script' ), 100 );
+		}
+		require plugin_dir_path( __FILE__ ) . 'partials/event-controller-admin-job-list.php';
+	}
+
+	/**
+	 * @since 1.7.0
+	 */
+	public function print_post_event_script() {
+		require plugin_dir_path( __FILE__ ) . 'partials/event-controller-admin-form-script.php';
+	}
+
+	/**
+	 * @since 1.7.0
+	 */
+	public function print_job_detail_script() {
+		require plugin_dir_path( __FILE__ ) . 'partials/event-controller-admin-job-detail-script.php';
+	}
+
+	/**
 	 * Register the stylesheets for the admin area.
 	 *
 	 * @since    1.0.0
+	 * @param    string    $hook_suffix    The current admin page, passed by WordPress.
 	 */
-	public function enqueue_styles() {
-
-		/**
-		 * This function is provided for demonstration purposes only.
-		 *
-		 * An instance of this class should be passed to the run() function
-		 * defined in Event_Controller_Loader as all of the hooks are defined
-		 * in that particular class.
-		 *
-		 * The Event_Controller_Loader will then create the relationship
-		 * between the defined hooks and the functions defined in this
-		 * class.
-		 */
+	public function enqueue_styles( $hook_suffix = '' ) {
 
 		wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'css/event-controller-admin.css', array(), $this->version, 'all' );
+
+		if ( in_array( $hook_suffix, array( 'toplevel_page_event-controller', 'event-controller_page_event-controller-jobs' ), true ) ) {
+			wp_enqueue_style( 'ec-bootstrap', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css', array(), '5.3.3' );
+			wp_enqueue_style( 'ec-daterange-picker', 'https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css', array(), null );
+		}
 
 	}
 
@@ -81,22 +146,20 @@ class Event_Controller_Admin {
 	 * Register the JavaScript for the admin area.
 	 *
 	 * @since    1.0.0
+	 * @param    string    $hook_suffix    The current admin page, passed by WordPress.
 	 */
-	public function enqueue_scripts() {
-
-		/**
-		 * This function is provided for demonstration purposes only.
-		 *
-		 * An instance of this class should be passed to the run() function
-		 * defined in Event_Controller_Loader as all of the hooks are defined
-		 * in that particular class.
-		 *
-		 * The Event_Controller_Loader will then create the relationship
-		 * between the defined hooks and the functions defined in this
-		 * class.
-		 */
+	public function enqueue_scripts( $hook_suffix = '' ) {
 
 		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/event-controller-admin.js', array( 'jquery' ), $this->version, false );
+
+		// Only load these heavy third-party assets on our own admin pages.
+		if ( 'toplevel_page_event-controller' === $hook_suffix ) {
+			wp_enqueue_script( 'ec-bootstrap', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js', array(), '5.3.3', true );
+			wp_enqueue_script( 'ec-drp-moment', 'https://cdn.jsdelivr.net/momentjs/latest/moment.min.js', array(), null, true );
+			wp_enqueue_script( 'ec-daterange-picker', 'https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js', array( 'ec-drp-moment' ), null, true );
+			// This is the TinyMCE API key from darickquinto@gmail.com - should be replaced before production.
+			wp_enqueue_script( 'ec-wysiwyg', 'https://cdn.tiny.cloud/1/2gsxlj7p8c0istuycljhrr5v0vkef00u9iigmksvo3uiqfm5/tinymce/7/tinymce.min.js', array(), null, true );
+		}
 
 	}
 

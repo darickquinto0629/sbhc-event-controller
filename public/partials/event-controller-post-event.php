@@ -16,7 +16,13 @@ class Event_Controller_Form {
 	 */
 	public function __construct() {
 		add_action( 'wp_enqueue_scripts', array( $this, 'register_scripts' ) );
-		add_shortcode( 'events-form', array( $this, 'render_shortcode' ) );
+		// The [events-form] shortcode is intentionally NOT registered as of
+		// Phase 5 (1.7.0) - the submission form moved to a WP admin page
+		// (Event Controller > Post Event), using the queued delivery pipeline
+		// with a live per-site progress view instead of this shortcode's
+		// synchronous admin-ajax submission. This class/file is left intact
+		// (not deleted) in case of rollback. See EVENT-CONTROLLER-ARCHITECTURE-REVIEW.md.
+		// add_shortcode( 'events-form', array( $this, 'render_shortcode' ) );
 	}
 
 	/**
@@ -265,7 +271,7 @@ class Event_Controller_Form {
 	</div>
 	
    <div class="col-md-12 mb-3"> 
-	    <label for="summary" class="">Short Summary</label>
+	    <label for="summary">Short Summary <span>(this is only used on summitbhc.com’s homepage currently)</span></label>
         <textarea id="short_summary" name="short_summary"></textarea>
 	</div>	
 	

@@ -12,12 +12,48 @@
 
 class Event_Controller_Form_Handler {
 
+	/** Lock is reclaimed as stale after this many seconds (must exceed the worst-case processing window). */
+	const LOCK_TTL = 300;
+
+	/** How long cached results are retained before the cleanup cron removes them. */
+	const RESULT_TTL = 3600;
+
 	/**
 	 * Initialize the class and set up AJAX handler
 	 */
 	public function __construct() {
 		add_action( 'wp_ajax_event_controller_submit_event', array( $this, 'handle_form_submission' ) );
 		//add_action( 'wp_ajax_nopriv_event_controller_submit_event', array( $this, 'handle_form_submission' ) );
+
+		add_action( 'event_controller_cleanup_stale_options', array( $this, 'cleanup_stale_options' ) );
+		if ( ! wp_next_scheduled( 'event_controller_cleanup_stale_options' ) ) {
+			wp_schedule_event( time(), 'hourly', 'event_controller_cleanup_stale_options' );
+		}
+	}
+
+	/**
+	 * Delete cached result options older than RESULT_TTL and reclaim any
+	 * stale locks left behind by interrupted requests.
+	 */
+	public function cleanup_stale_options() {
+		global $wpdb;
+
+		$result_cutoff = time() - self::RESULT_TTL;
+		$result_rows = $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'event\\_controller\\_result\\_%'" );
+		foreach ( $result_rows as $row ) {
+			$value = maybe_unserialize( $row->option_value );
+			if ( is_array( $value ) && isset( $value['cached_at'] ) && $value['cached_at'] < $result_cutoff ) {
+				delete_option( $row->option_name );
+			}
+		}
+
+		$lock_rows = $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'event\\_controller\\_lock\\_%'" );
+		foreach ( $lock_rows as $row ) {
+			$lock_time = (int) $row->option_value;
+			if ( $lock_time && ( time() - $lock_time ) > self::LOCK_TTL ) {
+				delete_option( $row->option_name );
+			}
+		}
 	}
 
 	/**
@@ -46,13 +82,13 @@ class Event_Controller_Form_Handler {
 		
 		while ( time() - $start_time < $timeout ) {
 			// Check cache first (faster than database)
-			$result = wp_cache_get( $result_key );
-			if ( ! $result ) {
-				$result = get_option( $result_key );
+			$cached = wp_cache_get( $result_key );
+			if ( ! $cached ) {
+				$cached = get_option( $result_key );
 			}
-			if ( $result ) {
+			if ( $cached && isset( $cached['response'] ) ) {
 				error_log('EVENT_CONTROLLER: Retry retrieved result after ' . (time() - $start_time) . 's');
-				return $result;
+				return $cached['response'];
 			}
 			sleep( $poll_interval );
 		}
@@ -66,15 +102,21 @@ class Event_Controller_Form_Handler {
 	 */
 	public function handle_form_submission() {
 		error_log('EVENT_CONTROLLER: Form submission received');
-		
+
+		// Capability check - the nonce alone does not restrict who can submit events
+		if ( ! current_user_can( 'manage_options' ) ) {
+			error_log('EVENT_CONTROLLER: Capability check failed for user ID ' . get_current_user_id());
+			wp_send_json_error( array( 'message' => 'You do not have permission to perform this action' ) );
+		}
+
 		// Verify nonce
 		if ( ! isset( $_POST['nonce'] ) ) {
 			error_log('EVENT_CONTROLLER: No nonce in POST');
 			wp_send_json_error( array( 'message' => 'No nonce provided' ) );
 		}
 		
-		if ( ! wp_verify_nonce( $_POST['nonce'], 'event_controller_submit' ) ) {
-			error_log('EVENT_CONTROLLER: Nonce verification failed. Nonce: ' . $_POST['nonce']);
+		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'event_controller_submit' ) ) {
+			error_log('EVENT_CONTROLLER: Nonce verification failed. Nonce: ' . sanitize_text_field( wp_unslash( $_POST['nonce'] ) ));
 			wp_send_json_error( array( 'message' => 'Nonce verification failed' ) );
 		}
 
@@ -109,7 +151,18 @@ class Event_Controller_Form_Handler {
 		// Only the original request succeeds; retries wait for the result
 		$lock_key = 'event_controller_lock_' . $idempotency_key;
 		$lock_acquired = add_option( $lock_key, time(), '', 'no' );
-		
+
+		if ( ! $lock_acquired ) {
+			// Reclaim a stale lock left behind by a request that never reached its finally block
+			// (fatal error, OOM kill, max_execution_time). Without this, the lock is permanent.
+			$lock_time = get_option( $lock_key );
+			if ( $lock_time && ( time() - (int) $lock_time ) > self::LOCK_TTL ) {
+				error_log('EVENT_CONTROLLER: Stale lock detected (age ' . (time() - (int) $lock_time) . 's), reclaiming: ' . $lock_key);
+				delete_option( $lock_key );
+				$lock_acquired = add_option( $lock_key, time(), '', 'no' );
+			}
+		}
+
 		if ( $lock_acquired ) {
 			// Lock acquired - this is the original request
 			error_log('EVENT_CONTROLLER: Lock acquired for submission: ' . $idempotency_key);
@@ -252,16 +305,22 @@ class Event_Controller_Form_Handler {
 			if ( $response_to_send ) {
 				error_log('EVENT_CONTROLLER: Response to send exists, caching now');
 				$result_key = 'event_controller_result_' . $idempotency_key;
-				
-				error_log('EVENT_CONTROLLER: Before update_option, key: ' . $result_key);
-				$update_result = update_option( $result_key, $response_to_send );
-				error_log('EVENT_CONTROLLER: After update_option, result: ' . ($update_result ? 'true' : 'false'));
+				$wrapped = array( 'cached_at' => time(), 'response' => $response_to_send );
+
+				error_log('EVENT_CONTROLLER: Before caching result, key: ' . $result_key);
+				if ( false === get_option( $result_key ) ) {
+					// autoload=no: this option must never be loaded on every page request (see H4)
+					$update_result = add_option( $result_key, $wrapped, '', 'no' );
+				} else {
+					$update_result = update_option( $result_key, $wrapped, false );
+				}
+				error_log('EVENT_CONTROLLER: After caching result: ' . ($update_result ? 'true' : 'false'));
 				
 				// Verify it was saved
 				$verify = get_option( $result_key );
 				error_log('EVENT_CONTROLLER: Verified saved option (exists: ' . ($verify ? 'yes' : 'no') . ')');
 				
-				wp_cache_set( $result_key, $response_to_send, '', 300 );
+				wp_cache_set( $result_key, $wrapped, '', 300 );
 				error_log('EVENT_CONTROLLER: wp_cache_set executed');
 			} else {
 				error_log('EVENT_CONTROLLER: Response to send is NULL/empty, skipping cache');
@@ -359,9 +418,13 @@ class Event_Controller_Form_Handler {
 
 		$multi_handle = curl_multi_init();
 		$handles = array();
-		$file_content = file_get_contents( $file['tmp_name'] );
 
 		error_log('EVENT_CONTROLLER: Setting up parallel media uploads for ' . count( $site_credentials ) . ' sites');
+
+		// Build the multipart body once - it is identical for every site, so reading
+		// the file and constructing the string per-site wasted memory at 50-site scale (H1)
+		$boundary = wp_generate_password( 24 );
+		$body = $this->build_multipart_body( $file, $boundary );
 
 		// Create upload requests for all sites
 		foreach ( $site_credentials as $site_id => $credentials ) {
@@ -373,10 +436,6 @@ class Event_Controller_Form_Handler {
 				$results[ $site_id ] = new WP_Error( 'invalid_url', 'Invalid or unsecure URL' );
 				continue;
 			}
-
-			// Build multipart body
-			$boundary = wp_generate_password( 24 );
-			$body = $this->build_multipart_body( $file, $boundary );
 
 			// Create cURL handle
 			$handle = curl_init();
@@ -419,28 +478,25 @@ class Event_Controller_Form_Handler {
 		foreach ( $handles as $site_id => $handle ) {
 			$response_code = curl_getinfo( $handle, CURLINFO_HTTP_CODE );
 			$response_body = curl_multi_getcontent( $handle );
+			$curl_errno = curl_errno( $handle );
 			$curl_error = curl_error( $handle );
 
 			error_log('EVENT_CONTROLLER: Site ' . $site_id . ' upload response code: ' . $response_code);
 
-			if ( $curl_error ) {
-				error_log('EVENT_CONTROLLER: cURL error for ' . $site_id . ': ' . $curl_error);
+			if ( $curl_errno ) {
+				error_log('EVENT_CONTROLLER: cURL error for ' . $site_id . ': [' . $curl_errno . '] ' . $curl_error);
 				
-				// Map common cURL errors
+				// Map cURL error codes (not strpos on the message text - see H6) to user-friendly messages
 				$connection_errors = array(
-					'7'  => 'Failed to connect to remote site - site may be down or URL is incorrect',
-					'28' => 'Remote site is not responding - connection timed out',
-					'6'  => 'Invalid site URL or DNS not resolving - check site URL configuration',
-					'60' => 'SSL certificate error on remote site - contact site administrator',
+					CURLE_COULDNT_CONNECT      => 'Failed to connect to remote site - site may be down or URL is incorrect',
+					CURLE_OPERATION_TIMEOUTED  => 'Remote site is not responding - connection timed out',
+					CURLE_COULDNT_RESOLVE_HOST => 'Invalid site URL or DNS not resolving - check site URL configuration',
+					CURLE_SSL_CACERT           => 'SSL certificate error on remote site - contact site administrator',
 				);
 				
-				$user_message = 'Failed to upload media: Failed to connect to remote site';
-				foreach ( $connection_errors as $code => $message ) {
-					if ( strpos( $curl_error, $code ) !== false ) {
-						$user_message = 'Failed to upload media: ' . $message;
-						break;
-					}
-				}
+				$user_message = isset( $connection_errors[ $curl_errno ] )
+					? 'Failed to upload media: ' . $connection_errors[ $curl_errno ]
+					: 'Failed to upload media: Failed to connect to remote site';
 				
 				$results[ $site_id ] = new WP_Error( 'upload_failed', $user_message );
 				curl_multi_remove_handle( $multi_handle, $handle );
@@ -579,28 +635,25 @@ class Event_Controller_Form_Handler {
 		foreach ( $handles as $site_id => $handle ) {
 			$response_code = curl_getinfo( $handle, CURLINFO_HTTP_CODE );
 			$response_body = curl_multi_getcontent( $handle );
+			$curl_errno = curl_errno( $handle );
 			$curl_error = curl_error( $handle );
 
 			error_log('EVENT_CONTROLLER: Site ' . $site_id . ' post response code: ' . $response_code);
 
-			if ( $curl_error ) {
-				error_log('EVENT_CONTROLLER: cURL error for ' . $site_id . ': ' . $curl_error);
+			if ( $curl_errno ) {
+				error_log('EVENT_CONTROLLER: cURL error for ' . $site_id . ': [' . $curl_errno . '] ' . $curl_error);
 				
-				// Map common cURL errors
+				// Map cURL error codes (not strpos on the message text - see H6) to user-friendly messages
 				$connection_errors = array(
-					'7'  => 'Failed to connect to remote site - site may be down or URL is incorrect',
-					'28' => 'Remote site is not responding - connection timed out',
-					'6'  => 'Invalid site URL or DNS not resolving - check site URL configuration',
-					'60' => 'SSL certificate error on remote site - contact site administrator',
+					CURLE_COULDNT_CONNECT      => 'Failed to connect to remote site - site may be down or URL is incorrect',
+					CURLE_OPERATION_TIMEOUTED  => 'Remote site is not responding - connection timed out',
+					CURLE_COULDNT_RESOLVE_HOST => 'Invalid site URL or DNS not resolving - check site URL configuration',
+					CURLE_SSL_CACERT           => 'SSL certificate error on remote site - contact site administrator',
 				);
 				
-				$user_message = 'Failed to post event: Failed to connect to remote site';
-				foreach ( $connection_errors as $code => $message ) {
-					if ( strpos( $curl_error, $code ) !== false ) {
-						$user_message = 'Failed to post event: ' . $message;
-						break;
-					}
-				}
+				$user_message = isset( $connection_errors[ $curl_errno ] )
+					? 'Failed to post event: ' . $connection_errors[ $curl_errno ]
+					: 'Failed to post event: Failed to connect to remote site';
 				
 				$results[ $site_id ] = new WP_Error( 'post_failed', $user_message );
 				curl_multi_remove_handle( $multi_handle, $handle );

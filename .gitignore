@@ -2,7 +2,6 @@
 wp-config.php
 wp-content/
 wp-includes/
-index.php
 wp-*.php
 *.log
 
@@ -11,8 +10,7 @@ node_modules/
 package-lock.json
 yarn.lock
 
-# Dependencies
-vendor/
+# Composer (dev-time only - this plugin bundles its runtime dependencies, see includes/vendor/)
 composer.lock
 
 # IDE

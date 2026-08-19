@@ -115,15 +115,19 @@ class Event_Controller_Public {
 
 		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/event-controller-public.js', array( 'jquery' ), $this->version, false );
 
-		// Localize script data
-		wp_localize_script(
-			$this->plugin_name,
-			'eventControllerData',
-			array(
-				'ajax_url' => admin_url( 'admin-ajax.php' ),
-				'nonce'    => wp_create_nonce( 'event_controller_submit' ),
-			)
-		);
+		// Only expose a working submission nonce to users who can actually use this form.
+		// Previously localized unconditionally, allowing any logged-in user to discover
+		// a valid nonce for event_controller_submit_event regardless of role (see C1).
+		if ( current_user_can( 'manage_options' ) ) {
+			wp_localize_script(
+				$this->plugin_name,
+				'eventControllerData',
+				array(
+					'ajax_url' => admin_url( 'admin-ajax.php' ),
+					'nonce'    => wp_create_nonce( 'event_controller_submit' ),
+				)
+			);
+		}
 
 	}
 

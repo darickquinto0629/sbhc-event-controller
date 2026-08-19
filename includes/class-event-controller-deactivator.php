@@ -31,6 +31,9 @@ class Event_Controller_Deactivator {
 	 */
 	public static function deactivate() {
 
+		wp_clear_scheduled_hook( 'event_controller_cleanup_stale_options' );
+		wp_clear_scheduled_hook( 'ec_logger_purge_old_logs' );
+
 	}
 
 }

@@ -2,6 +2,162 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [Unreleased] - 2026-08-19
+
+### Verified
+
+#### **Load & Chaos Testing (Phase 7 of multi-site delivery rework)**
+
+- Verified batch throughput and memory stability processing dozens of sites in a single background-worker run
+- Verified a worker that runs out of time defers its remaining work without losing any of it, and that the deferred work is correctly picked up and completed afterward
+- Verified the per-site circuit breaker correctly tracks repeated failures against a real site
+- No code changes were required - this phase was testing/verification only
+- **Decision:** the legacy front-end submission code is being kept in place (unused, but intact) as a safety net rather than removed at this time
+
+---
+
+## [1.8.0] - 2026-08-19
+
+### Added
+
+#### **Structured Logging & Log Retention (Phase 6 of multi-site delivery rework)**
+
+- Delivery events (claimed, media uploaded, event posted, retries, failures, reconciliation outcomes) are now written to a dedicated, queryable log table instead of the server's plain text error log
+- Each log entry can be traced back to the exact job and site it belongs to
+- Log detail level is adjustable (quiet by default, more detail available on demand) without any code changes
+- Authorization credentials are never written to the log, even in detailed mode
+- Old log entries are automatically cleaned up after 30 days
+
+### Changed
+
+- Plugin version bumped to 1.8.0
+
+---
+
+## [1.7.0] - 2026-08-19
+
+### Changed
+
+#### **Event Submission Moved to the WordPress Admin (Phase 5 of multi-site delivery rework)**
+
+- The event submission form has moved from the front-end `[events-form]` shortcode to a new **Event Controller** admin menu (Post Event / Jobs), using the queued delivery pipeline built in Phases 1-4
+- Submitting an event now returns immediately and takes you to a live job status page instead of waiting on the page with a spinner
+- The job status page shows an overall progress bar, counts of succeeded/processing/retrying/failed sites, and a per-site table with status, attempt count, remote event ID, next retry time, and error detail - updating automatically every few seconds until the job finishes
+- Added a "Retry failed sites" button to re-queue just the sites that failed, and a "Cancel job" button to stop a job that's still in progress
+- Added a Jobs list page showing recent submissions and their outcomes
+- The front-end shortcode is disabled (not deleted) as a safety net
+
+### Added
+
+- New REST endpoints for listing jobs and for retrying/cancelling a specific job
+
+---
+
+## [1.6.0] - 2026-08-19
+
+### Added
+
+#### **Retry, Circuit Breaker & Ambiguous-Outcome Handling (Phase 4 of multi-site delivery rework)**
+
+- Delivery failures are now classified as permanent, retryable, or ambiguous instead of always failing outright
+- Retryable failures (e.g. remote site temporarily unavailable) are automatically retried with increasing delays, up to 5 attempts
+- Permanent failures (e.g. bad credentials, missing endpoint) fail immediately without wasting retries
+- Ambiguous outcomes (e.g. the request timed out but the remote site may have actually processed it) are no longer retried blindly - the plugin now checks with the remote site first before deciding whether it's safe to retry, to avoid creating a duplicate event
+- A site that fails repeatedly is temporarily skipped instead of having every queued job retry against it individually, then automatically tested again after a cooldown period
+- **Important caveat:** the remote-site check for ambiguous outcomes has not yet been verified against a real remote site's actual capabilities. Every uncertain result defers rather than guessing, but this needs real-world validation before being relied on in production
+- The existing form still uses the original, unaffected submission process
+
+### Changed
+
+- Plugin version bumped to 1.6.0
+
+---
+
+## [1.5.0] - 2026-08-19
+
+### Added
+
+#### **Real Event Delivery via the Job Queue (Phase 3 of multi-site delivery rework)**
+
+- New `EC_Payload_Transformer` class: the Events Manager API payload transformation, moved out of the legacy handler with no logic change so both the legacy form and the new queue can use it
+- New `EC_Events_API_Client` class: uploads media and posts events to a single remote site through the queue pipeline
+- The background worker now performs real delivery: uploads the featured image (if any) then posts the event, persisting the remote site's IDs as each step succeeds
+- If the event fails to post after the image already uploaded successfully, the image is not uploaded again on a later attempt - only the event post is retried, preventing duplicate/orphaned images on remote sites
+- Job-level status and success/failure counts now update automatically as each site finishes
+- **Note:** retry scheduling, backoff, and handling of ambiguous/timeout responses are not implemented yet — any delivery failure is currently final for that site. This lands in Phase 4. The existing form still uses the original, unaffected submission process
+
+### Changed
+
+- Plugin version bumped to 1.5.0
+
+---
+
+## [1.4.0] - 2026-08-19
+
+### Added
+
+#### **Background Delivery Worker (Phase 2 of multi-site delivery rework)**
+
+- Bundled Action Scheduler 4.0.0 (the WooCommerce background-job library) directly inside the plugin at `includes/vendor/action-scheduler/` — no WooCommerce, Composer, or other plugin required at runtime
+- Verified safe to run alongside other plugins that bundle their own (different) copy of Action Scheduler; only the newest version among all copies actually initializes, and no plugin depends on another's copy
+- New `EC_Site_Job_Repository` class: atomically claims a queued site job for processing, preventing two workers (or a duplicate dispatch) from delivering the same event to the same site twice
+- New `EC_Delivery_Worker` class: the background worker skeleton. Includes a time/memory execution budget so a single worker run cannot block a request indefinitely — remaining jobs are safely rescheduled instead
+- Creating a job now automatically hands each site off to the background worker; the request that creates the job returns immediately without waiting for delivery
+- **Note:** actual delivery (uploading media, posting the event) is not implemented yet — this release proves the queue → worker → completion pipeline end-to-end. Real delivery lands in Phase 3. The existing form still uses the original, unaffected submission process
+
+### Changed
+
+- Plugin version bumped to 1.4.0
+
+---
+
+## [1.3.0] - 2026-08-19
+
+### Added
+
+#### **Job Queue Infrastructure (Phase 1 of multi-site delivery rework)**
+
+- New database tables `ec_jobs` and `ec_site_jobs` to durably track event delivery jobs and their per-site status, replacing the plan to rely on `wp_options` for this purpose
+- New `EC_Site_Registry` class: loads remote site credentials from the ACF `site_details` repeater once per request instead of re-scanning it for every site
+- New `EC_Job_Manager` class: creates jobs, persists uploaded featured images to a private, non-web-indexed directory, and de-duplicates identical submissions via a unique idempotency key
+- New REST API endpoints (`POST /event-controller/v1/jobs`, `GET /event-controller/v1/jobs/{id}`), gated by the `manage_options` capability
+- No background worker yet and the existing form does not use this pipeline yet — this release only adds the underlying infrastructure. See `EVENT-CONTROLLER-ARCHITECTURE-REVIEW.md` for the full multi-phase plan
+
+### Fixed
+
+#### **Security: Missing Capability Check on Event Submission**
+
+- The AJAX handler for event submission previously checked only a nonce, and that nonce was generated for every logged-in user regardless of role
+- Any authenticated user (not just administrators) could have submitted events to all configured remote sites
+- Added an explicit `current_user_can( 'manage_options' )` check to the AJAX handler
+- The submission nonce is now only sent to the browser for users who can actually use the form
+
+#### **Stale Lock Could Permanently Block Re-Submission of an Event**
+
+- The duplicate-submission lock was only released in a `finally` block; a crashed or killed PHP process left the lock in place forever, meaning that exact event could never be submitted again
+- Locks older than 5 minutes (longer than the slowest expected processing time) are now automatically reclaimed
+
+#### **Cached Submission Results Were Never Cleaned Up**
+
+- Cached results and locks were written to `wp_options` without `autoload` disabled, and were never deleted
+- Both now explicitly set `autoload = no`, and an hourly scheduled cleanup removes results older than 1 hour and locks older than 5 minutes
+
+#### **Memory Usage During Multi-Site Media Upload**
+
+- The featured image was being read from disk and re-encoded into a multipart request body once per remote site
+- The multipart body is now built once and reused for every site
+
+#### **Inaccurate Connection Error Messages**
+
+- Connection error classification used a substring search for digits like `'7'` or `'28'` against the raw error text, which could match unrelated numbers (e.g. a port number) and produce the wrong error message
+- Now uses the actual cURL error code for classification
+
+### Changed
+
+- Plugin version bumped to 1.3.0
+
+---
+
 ## [1.2.2] - 2026-08-19
 
 ### Fixed

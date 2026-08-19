@@ -2,3 +2,6 @@
  * All of the CSS for your admin-specific functionality should be
  * included in this file.
  */
+form#ec-form {
+  max-width: 1200px;
+}
