@@ -16,7 +16,7 @@
  * Plugin Name:       Event Controller
  * Plugin URI:        https://https://summitbhc.com/
  * Description:       This plugin manages and controls event dispatching to remote event client endpoints.
- * Version:           1.8.0
+ * Version:           1.8.1
  * Author:            SBHC
  * Author URI:        https://https://summitbhc.com//
  * License:           GPL-2.0+

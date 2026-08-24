@@ -2,7 +2,7 @@
 
 All notable changes to Event Controller will be documented in this file.
 
-## [Unreleased] - 2026-08-24
+## [1.8.1] - 2026-08-24
 
 ### Changed
 
@@ -16,7 +16,7 @@ All notable changes to Event Controller will be documented in this file.
 
 ---
 
-## [Unreleased] - 2026-08-19
+## [1.8.0] - 2026-08-19
 
 ### Verified
 
@@ -27,10 +27,6 @@ All notable changes to Event Controller will be documented in this file.
 - Verified the per-site circuit breaker correctly tracks repeated failures against a real site
 - No code changes were required - this phase was testing/verification only
 - **Decision:** the legacy front-end submission code is being kept in place (unused, but intact) as a safety net rather than removed at this time
-
----
-
-## [1.8.0] - 2026-08-19
 
 ### Added
 

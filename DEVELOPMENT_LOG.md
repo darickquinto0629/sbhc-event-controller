@@ -2,7 +2,7 @@
 
 Technical documentation of fixes, architecture decisions, and debugging context.
 
-## Post Event Form UX Improvements (2026-08-24)
+## Version 1.8.1: Post Event Form UX Improvements (2026-08-24)
 
 **Context:** The Post Event form in the WordPress admin (added in Phase 5) had minimal UX polish. This update enhances form validation, guidance, and visual design without changing any backend behavior or job pipeline functionality.
 
