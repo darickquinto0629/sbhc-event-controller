@@ -19,8 +19,9 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 ?>
-<div class="wrap">
+<div id="form-page" class="wrap">
 	<h1>Post Event</h1>
+	<p class="ec-form-description">Enter the event details below and select the client sites where you want the event to be posted.</p>
 
 	<form id="ec-form" class="row g-3 mt-3">
 
@@ -28,7 +29,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 		<div class="col-md-12 mb-3">
 		  <label for="featured_image" class="form-label">Set Featured Image</label>
-		  <input class="form-control" type="file" id="featured_image" name="async-upload">
+		  <input class="form-control" type="file" id="featured_image" name="async-upload" required>
 		</div>
 
 		<div class="col-md-12 mb-3">
@@ -44,7 +45,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 		<div class="col-md-6 mb-3">
 		  <label for="TicketPrice" class="">Ticket Price</label>
-		  <input type="text" name="ticketprice" class="form-control">
+		  <input type="text" name="ticketprice" class="form-control" required>
 		</div>
 
 		<div class="col-md-6 mb-3" style="display: none">
@@ -248,6 +249,8 @@ if ( ! defined( 'WPINC' ) ) {
 								</div>
 					<?php
 							endwhile;
+						else: 
+							echo '<p class="text-danger">Please add the client sites where events should be sent.</p>';
 						endif;
 					?>
 				</div>

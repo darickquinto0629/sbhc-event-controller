@@ -4,10 +4,27 @@
  */
 form#ec-form {
   max-width: 1200px;
+  max-width: 1200px;
+  position: relative;
+  padding: 1rem;
+  background-color: #f6f9fa;
 }
 #ec-form input[type="checkbox"] {
   float: none;
 }
 #ec-form .form-check label {
   vertical-align: unset;
+}
+#featured_image {
+  padding: 3px 12px;
+}
+.wp-core-ui #ec-form select {
+  max-width: 100%;
+}
+#form-page p.ec-form-description {
+  font-size: 16px;
+  font-style: italic;
+}
+#ec-form p {
+  font-size: 16px;
 }

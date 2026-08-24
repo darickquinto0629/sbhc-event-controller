@@ -2,6 +2,93 @@
 
 Technical documentation of fixes, architecture decisions, and debugging context.
 
+## Post Event Form UX Improvements (2026-08-24)
+
+**Context:** The Post Event form in the WordPress admin (added in Phase 5) had minimal UX polish. This update enhances form validation, guidance, and visual design without changing any backend behavior or job pipeline functionality.
+
+### Changes to `admin/partials/event-controller-admin-post-event.php`
+
+**Form wrapper ID:** Added `id="form-page"` to the outer `<div class="wrap">` element to enable targeted CSS styling and future JavaScript reference.
+
+**Descriptive text:** Added a new paragraph immediately after the `<h1>Post Event</h1>` heading:
+
+```html
+<p class="ec-form-description">
+  Enter the event details below and select the client sites where you want the
+  event to be posted.
+</p>
+```
+
+This clarifies the form's purpose without requiring additional documentation.
+
+**Required field validation:** Added HTML5 `required` attribute to:
+
+- Featured Image input (`#featured_image`) - prevents submission without selecting an image
+- Ticket Price input (`#ticketprice`) - prevents submission without entering a price
+
+These use native browser validation (red outline, tooltip on submit attempt) rather than custom JavaScript, matching the form's existing approach. No changes to backend validation were made.
+
+**Client site feedback:** Added an error message when no client sites are available (the `else` block in the site-selection loop):
+
+```html
+else: echo '
+<p class="text-danger">
+  Please add the client sites where events should be sent.
+</p>
+';
+```
+
+This replaces silent failure with clear guidance, immediately visible if the user hasn't configured any sites in ACF.
+
+### Changes to `admin/css/event-controller-admin.css`
+
+**Form styling enhancements** to `#ec-form`:
+
+- Added `padding: 1rem;` for internal breathing room
+- Added `background-color: #f6f9fa;` (a subtle light blue) to visually separate the form from the page background
+- Added `position: relative;` for potential future positioning context
+
+**Featured image input:** Added `padding: 3px 12px;` to `#featured_image` for better visual proportions relative to other inputs.
+
+**Select dropdown consistency:** Added rule for `.wp-core-ui #ec-form select` with `max-width: 100%;` to ensure all select dropdowns use full available width (consistent with text inputs).
+
+**Typography improvements:**
+
+- `#form-page p.ec-form-description`: Set `font-size: 16px;` and `font-style: italic;` to visually distinguish the helper text from regular form labels
+- `#ec-form p`: Set `font-size: 16px;` globally on all paragraphs within the form for consistent sizing (including the new error message and existing labels)
+
+### Visual Design Rationale
+
+- **Background color** (`#f6f9fa`): Light enough to read text comfortably, visually distinct from white page background without being jarring
+- **Italic description text**: Standard convention for supplementary/explanatory text
+- **Error message in red** (`.text-danger`): Bootstrap's standard class for user-facing errors, already used elsewhere in the plugin
+- **Padding and spacing**: Follows Bootstrap's `g-3` (gap) class already applied to the form, adding consistent internal breathing room
+
+### Non-Breaking Status
+
+- No schema changes, no backend logic changes
+- No REST API or job pipeline modifications
+- No changes to existing valid form submission flows - validation is purely additive (tightens client-side checks)
+- The form still submits via the same Phase 5 `/wp-json/event-controller/v1/jobs` endpoint with no payload changes
+- CSS is purely visual - no structural or interaction changes
+
+### Testing
+
+Verified with temporary manual inspection (deleted after use) that:
+
+1. Form renders without errors
+2. Required field attributes prevent form submission in all tested browsers
+3. CSS padding and background color render as expected
+4. Error message appears when no sites are available
+5. Existing form functionality (date pickers, site selection, submission) continues to work
+
+### Next Steps
+
+- None specific to this UX improvement; remains part of the ongoing Phase 5+ feature set
+- Future enhancements could include client-side validation error styling, animated transitions, or accessibility improvements (ARIA labels) if needed
+
+---
+
 ## Phase 7: Load/Chaos Testing (2026-08-19)
 
 **Context:** The final phase from the architecture review's plan: load/chaos testing at scale, then (per the review) flipping the default to the new pipeline and retiring the legacy `curl_multi` code. The "flip the default" part of the original plan was effectively already completed in Phase 5, when the front-end form was moved to admin and wired directly to the new pipeline rather than gradually rolled out behind a flag - there was no separate `ec_delivery_mode` flag ever built, so nothing remains to flip. No code changes were made in this phase; it is testing and a documented decision only.

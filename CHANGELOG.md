@@ -2,6 +2,20 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [Unreleased] - 2026-08-24
+
+### Changed
+
+#### **Post Event Form UX Improvements**
+
+- Added descriptive text to the Post Event form explaining how to use it
+- Made Featured Image and Ticket Price fields required, with HTML5 validation
+- Enhanced visual feedback when no client sites are configured (error message displayed)
+- Improved form styling with padding, subtle background color, and consistent typography across form elements and paragraphs
+- Added unique ID to form wrapper for targeted styling and JavaScript reference
+
+---
+
 ## [Unreleased] - 2026-08-19
 
 ### Verified
