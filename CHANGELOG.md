@@ -4,6 +4,12 @@ All notable changes to Event Controller will be documented in this file.
 
 ## [1.8.2] - 2026-08-26
 
+### Changed
+
+#### **Default Timezone Selection**
+
+- Changed the default pre-selected timezone on the Post Event form from `America/Chicago` to `America/New_York`
+
 ### Fixed
 
 #### **Stray "n" Character Appearing in Pasted Summary Content**

@@ -2,6 +2,12 @@
 
 Technical documentation of fixes, architecture decisions, and debugging context.
 
+## Version 1.8.2: Default Timezone Changed to America/New_York (2026-08-26)
+
+**Change:** In `admin/partials/event-controller-admin-post-event.php`, the Post Event form's `event_timezone` dropdown pre-selects `America/New_York` instead of `America/Chicago`. Only the `selected` comparison value changed; the full list of available timezones is unchanged and still user-selectable.
+
+---
+
 ## Version 1.8.2: Fix Stray "n" Character in Pasted Summary Content (2026-08-26)
 
 **Context:** Users reported that pasting multi-paragraph rich text into the Summary/Short Summary TinyMCE fields sometimes produced a stray `n` character between paragraphs after the event was posted, e.g.:

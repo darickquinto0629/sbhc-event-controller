@@ -116,7 +116,7 @@ if ( ! defined( 'WPINC' ) ) {
 		    );
 
 		    foreach ( $us_timezones as $tz => $label ) {
-		        $selected = ( 'America/Chicago' === $tz ) ? 'selected' : '';
+		        $selected = ( 'America/New_York' === $tz ) ? 'selected' : '';
 		        echo '<option value="' . esc_attr( $tz ) . '" ' . $selected . '>' . esc_html( $label ) . '</option>';
 		    }
 		    ?>
