@@ -104,11 +104,12 @@ class EC_REST_Controller {
 		$files          = $request->get_file_params();
 
 		if ( is_string( $selected_sites ) ) {
-			$selected_sites = json_decode( wp_unslash( $selected_sites ), true );
+			// WP_REST_Server already unslashes body params before this callback runs.
+			$selected_sites = json_decode( $selected_sites, true );
 		}
 
 		if ( is_string( $event_data ) ) {
-			$event_data = json_decode( wp_unslash( $event_data ), true );
+			$event_data = json_decode( $event_data, true );
 		}
 
 		if ( empty( $selected_sites ) || ! is_array( $selected_sites ) ) {

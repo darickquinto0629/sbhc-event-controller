@@ -2,6 +2,48 @@
 
 Technical documentation of fixes, architecture decisions, and debugging context.
 
+## Version 1.8.2: Fix Stray "n" Character in Pasted Summary Content (2026-08-26)
+
+**Context:** Users reported that pasting multi-paragraph rich text into the Summary/Short Summary TinyMCE fields sometimes produced a stray `n` character between paragraphs after the event was posted, e.g.:
+
+```html
+<p>
+  This training invites clinicians into a compassionate, embodied exploration...
+</p>
+n
+<p><em>Willingway is a subsidiary of Summit BHC</em></p>
+```
+
+**Root Cause:** In `includes/rest/class-ec-rest-controller.php`, `create_job()` decoded the `selected_sites` and `event_data` request params with:
+
+```php
+$event_data = json_decode( wp_unslash( $event_data ), true );
+```
+
+The admin Post Event form submits data as `multipart/form-data` (via `FormData`, to support file uploads) to the `/event-controller/v1/jobs` REST route. WordPress's `WP_REST_Server::serve_request()` already runs `wp_unslash( $_POST )` internally before populating the request's body params, so by the time `create_job()` receives `$event_data` from `$request->get_param()`, it has already been unslashed once.
+
+Calling `wp_unslash()` a second time over-stripped the JSON payload: a valid JSON escape sequence like `\n` (backslash + `n`, representing an escaped line break) had its backslash removed a second time, leaving a bare literal `n` character in the decoded string. This only became visible when the submitted content actually contained a real line break character - which happens when pasting HTML from sources (Word, Google Docs, etc.) that include literal newlines between block-level tags, but not with plain typed content.
+
+**Fix Applied:** Removed the redundant `wp_unslash()` call from both decode statements in `create_job()`:
+
+```php
+if ( is_string( $selected_sites ) ) {
+    $selected_sites = json_decode( $selected_sites, true );
+}
+
+if ( is_string( $event_data ) ) {
+    $event_data = json_decode( $event_data, true );
+}
+```
+
+**Non-Breaking Status:**
+
+- Content without line breaks or characters needing JSON-escaping was unaffected either way (there was nothing extra to strip), so existing submissions continue to work identically
+- No change to the job creation flow, `EC_Job_Manager::create()` call signature, response format, or any other REST route (`retry_job`, `cancel_job`, `get_job`, `list_jobs`)
+- Scope limited to `includes/rest/class-ec-rest-controller.php`
+
+---
+
 ## Version 1.8.1: Post Event Form UX Improvements (2026-08-24)
 
 **Context:** The Post Event form in the WordPress admin (added in Phase 5) had minimal UX polish. This update enhances form validation, guidance, and visual design without changing any backend behavior or job pipeline functionality.

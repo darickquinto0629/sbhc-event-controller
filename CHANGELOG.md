@@ -2,6 +2,19 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.8.2] - 2026-08-26
+
+### Fixed
+
+#### **Stray "n" Character Appearing in Pasted Summary Content**
+
+- Fixed a bug where pasting multi-paragraph content into the Summary/Short Summary WYSIWYG fields could introduce a stray `n` character between paragraphs (e.g. `</p>n<p>`)
+- Root cause: the Jobs REST endpoint was un-escaping the submitted event data twice - once automatically by WordPress's REST server, and again in the plugin's own code - which corrupted line-break characters in the JSON payload
+- Removed the redundant second un-escaping step so line breaks in submitted content are preserved correctly
+- No change to the job creation flow, request/response format, or any other endpoint behavior
+
+---
+
 ## [1.8.1] - 2026-08-24
 
 ### Changed
