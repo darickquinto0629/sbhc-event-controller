@@ -237,9 +237,13 @@ if ( ! defined( 'WPINC' ) ) {
 				<div class="col-mb-12">
 					<?php
 						if ( have_rows( 'site_details', 'option' ) ) :
+							$site_names = array();
 							while ( have_rows( 'site_details', 'option' ) ) :
 								the_row();
-								$name = get_sub_field( 'site_name' );
+								$site_names[] = get_sub_field( 'site_name' );
+							endwhile;
+							sort( $site_names, SORT_NATURAL | SORT_FLAG_CASE );
+							foreach ( $site_names as $name ) :
 					?>
 								<div class="form-check">
 								  <input class="form-check-input" type="checkbox" value="" id="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?>">
@@ -248,7 +252,7 @@ if ( ! defined( 'WPINC' ) ) {
 								  </label>
 								</div>
 					<?php
-							endwhile;
+							endforeach;
 						else: 
 							echo '<p class="text-danger">Please add the client sites where events should be sent.</p>';
 						endif;

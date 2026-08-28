@@ -2,6 +2,14 @@
 
 Technical documentation of fixes, architecture decisions, and debugging context.
 
+## Version 1.8.3: Site Checkboxes Sorted Alphabetically (2026-08-29)
+
+**Change:** In `admin/partials/event-controller-admin-post-event.php`, the client site checkboxes now display in alphabetical order (case-insensitive, natural sort).
+
+**Implementation:** Changed from rendering checkboxes directly in the ACF `have_rows()` loop to collecting all `site_name` values first, sorting them with `sort( $site_names, SORT_NATURAL | SORT_FLAG_CASE )`, then iterating over the sorted array to render the checkboxes. Each checkbox's HTML `id` attribute and value are still generated the same way from the normalized site name.
+
+**Impact on Submission:** No impact. The form still collects selected checkboxes by their `id` attributes and sends them as `selected_sites` in the POST payload. The backend's `get_site_credentials_by_id()` method in `class-event-controller-form-handler.php` looks up site credentials by matching the normalized checkbox ID against the same ACF repeater — it has no dependency on the display order.
+
 ## Version 1.8.2: Default Timezone Changed to America/New_York (2026-08-26)
 
 **Change:** In `admin/partials/event-controller-admin-post-event.php`, the Post Event form's `event_timezone` dropdown pre-selects `America/New_York` instead of `America/Chicago`. Only the `selected` comparison value changed; the full list of available timezones is unchanged and still user-selectable.

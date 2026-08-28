@@ -2,6 +2,18 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.8.3] - 2026-08-29
+
+### Changed
+
+#### **Site Checkboxes Sorted Alphabetically**
+
+- Client sites on the Post Event form now display in alphabetical order instead of the order they appear in the site_details repeater
+- Improves form usability when many sites are configured
+- No impact on submission data or site matching logic
+
+---
+
 ## [1.8.2] - 2026-08-26
 
 ### Changed
