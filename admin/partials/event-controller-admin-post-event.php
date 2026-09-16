@@ -38,14 +38,25 @@ if ( ! defined( 'WPINC' ) ) {
 		  <div class="invalid-feedback">Please enter a title for the event.</div>
 		</div>
 
-		<div class="col-md-6 mb-3">
-		  <label for="Presenter">Presenter</label>
-		  <input type="text" name="presenter" class="form-control">
-		</div>
-
-		<div class="col-md-6 mb-3">
+		<div class="col-md-12 mb-3">
 		  <label for="TicketPrice" class="">Ticket Price</label>
 		  <input type="text" name="ticketprice" class="form-control" required>
+		</div>
+
+		<div id="presenters" class="col-md-12 mb-3">
+		   <label for="Presenters">Presenters:</label>
+
+		   <div class="presenter-wrap">
+			   <div class="row">
+					<div class="col-md-10">
+						<input type="text" name="presenter" class="form-control presenter">
+					</div>
+					<div class="col-md-2 d-grid">
+						<button type="button" class="btn btn-primary mb-3 add_presenter">Add Presenter</button>
+					</div>
+			   </div>
+		   </div>
+
 		</div>
 
 		<div class="col-md-6 mb-3" style="display: none">

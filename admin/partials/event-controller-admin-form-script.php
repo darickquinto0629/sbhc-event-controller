@@ -172,13 +172,23 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       return objectives;
     }
 
+    // Helper: Collect presenters from form
+    function collectPresenters() {
+      const presenters = [];
+      $('input[name="presenter"]').each(function() {
+        const val = $(this).val().trim();
+        if (val !== '') presenters.push(val);
+      });
+      return presenters;
+    }
+
     // Helper: Collect all form fields into data object
-    function collectEventData(objectives, starttime, endtime) {
+    function collectEventData(presenters, objectives, starttime, endtime) {
       const eventLocationType = $('select[name="event_location_type"]').val();
 
       return {
         "event_title": $('input[name="event_title"]').val(),
-        "presenter": $('input[name="presenter"]').val(),
+        "presenter": presenters,
         "ticket_price": $('input[name="ticketprice"]').val(),
         "event_type": eventLocationType,
         "summary": $('textarea#summary').val(),
@@ -240,6 +250,26 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       $(this).closest('.row').remove();
     });
 
+    // Add a new presenter field
+    $('.add_presenter').click(function(e) {
+      e.preventDefault();
+      $('#presenters .presenter-wrap').append(`
+        <div class="row">
+          <div class="col-md-10">
+            <input type="text" name="presenter" class="form-control presenter">
+          </div>
+          <div class="col-md-2 d-grid">
+            <button type="button" class="btn btn-primary mb-3 remove_presenter">Remove</button>
+          </div>
+        </div>`);
+    });
+
+    // Remove a presenter row
+    $(document).on('click', '.remove_presenter', function(e) {
+      e.preventDefault();
+      $(this).closest('.row').remove();
+    });
+
     // Handle form submission - posts to the REST job queue, then navigates
     // to the job detail page (progress bar + per-site table) on success.
     $('#ec-form').on('submit', function(e) {
@@ -272,9 +302,10 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
       if (typeof tinyMCE !== 'undefined') tinyMCE.triggerSave();
 
       const objectives = collectObjectives();
+      const presenters = collectPresenters();
       const starttime = $('select[name="starttime"]').val();
       const endtime = $('select[name="endtime"]').val();
-      const data = collectEventData(objectives, starttime, endtime);
+      const data = collectEventData(presenters, objectives, starttime, endtime);
       const selectedSites = collectSelectedSites();
       const file = $('input[type=file]')[0].files[0];
 

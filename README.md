@@ -2,7 +2,7 @@
 
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue)
-![Version](https://img.shields.io/badge/version-1.8.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.9.0-brightgreen)
 
 Centralize event management and reliably syndicate events to dozens of remote WordPress sites through a durable, retry-aware background job queue.
 
@@ -186,31 +186,31 @@ The admin's browser only needs to stay open long enough to see the job get creat
 
 ### Key Components
 
-| Component | Responsibility |
-|---|---|
-| `EC_Job_Manager` | Creates jobs, de-duplicates identical submissions, persists uploaded media, rolls up job status |
-| `EC_Site_Registry` | Loads remote site credentials from the ACF `site_details` repeater |
-| `EC_Delivery_Worker` | Background worker: claims one site job per Action Scheduler action, runs the media-then-event delivery, enforces an execution time/memory budget |
-| `EC_Events_API_Client` | Single-site HTTP client for the Events Manager media/event endpoints |
-| `EC_Payload_Transformer` | Builds the Events Manager API payload from the submitted event data |
-| `EC_Error_Classifier` | Classifies a delivery failure as permanent, retryable, or ambiguous |
-| `EC_Retry_Policy` | Exponential backoff with jitter (up to 5 attempts) |
-| `EC_Circuit_Breaker` | Temporarily stops attempting delivery to a site that's failing repeatedly |
-| `EC_Reconciler` | Checks with the remote site before retrying an ambiguous outcome, to avoid creating a duplicate event |
-| `EC_Logger` | Structured, per-job/per-site logging with level gating and automatic retention purge |
-| `EC_REST_Controller` | REST API: create/list/get/retry/cancel jobs |
+| Component                | Responsibility                                                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EC_Job_Manager`         | Creates jobs, de-duplicates identical submissions, persists uploaded media, rolls up job status                                                  |
+| `EC_Site_Registry`       | Loads remote site credentials from the ACF `site_details` repeater                                                                               |
+| `EC_Delivery_Worker`     | Background worker: claims one site job per Action Scheduler action, runs the media-then-event delivery, enforces an execution time/memory budget |
+| `EC_Events_API_Client`   | Single-site HTTP client for the Events Manager media/event endpoints                                                                             |
+| `EC_Payload_Transformer` | Builds the Events Manager API payload from the submitted event data                                                                              |
+| `EC_Error_Classifier`    | Classifies a delivery failure as permanent, retryable, or ambiguous                                                                              |
+| `EC_Retry_Policy`        | Exponential backoff with jitter (up to 5 attempts)                                                                                               |
+| `EC_Circuit_Breaker`     | Temporarily stops attempting delivery to a site that's failing repeatedly                                                                        |
+| `EC_Reconciler`          | Checks with the remote site before retrying an ambiguous outcome, to avoid creating a duplicate event                                            |
+| `EC_Logger`              | Structured, per-job/per-site logging with level gating and automatic retention purge                                                             |
+| `EC_REST_Controller`     | REST API: create/list/get/retry/cancel jobs                                                                                                      |
 
 ### REST API
 
 All routes require the `manage_options` capability and WordPress' built-in `X-WP-Nonce` authentication.
 
-| Method | Route | Purpose |
-|---|---|---|
-| `POST` | `/wp-json/event-controller/v1/jobs` | Create a job (submits the event for delivery) |
-| `GET` | `/wp-json/event-controller/v1/jobs` | List recent jobs |
-| `GET` | `/wp-json/event-controller/v1/jobs/{id}` | Get a job's status and per-site detail |
-| `POST` | `/wp-json/event-controller/v1/jobs/{id}/retry` | Re-queue only the sites that failed |
-| `POST` | `/wp-json/event-controller/v1/jobs/{id}/cancel` | Cancel a job still in progress |
+| Method | Route                                           | Purpose                                       |
+| ------ | ----------------------------------------------- | --------------------------------------------- |
+| `POST` | `/wp-json/event-controller/v1/jobs`             | Create a job (submits the event for delivery) |
+| `GET`  | `/wp-json/event-controller/v1/jobs`             | List recent jobs                              |
+| `GET`  | `/wp-json/event-controller/v1/jobs/{id}`        | Get a job's status and per-site detail        |
+| `POST` | `/wp-json/event-controller/v1/jobs/{id}/retry`  | Re-queue only the sites that failed           |
+| `POST` | `/wp-json/event-controller/v1/jobs/{id}/cancel` | Cancel a job still in progress                |
 
 ### Remote API Endpoint
 

@@ -2,6 +2,20 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.9.0] - 2026-09-16
+
+### Changed
+
+#### **Presenter Field Converted to a Repeater**
+
+- The Post Event form's Presenter field now works like Learning Objectives: click "Add Presenter" to add additional presenter rows, or "Remove" to delete one, instead of being limited to a single text input
+- Submitted event data now sends `presenter` as an array of strings (one per presenter row) instead of a single string
+- The payload transformer now defaults `presenter` to an empty array instead of an empty string when building the remote Events Manager API payload
+- Remote client sites' ACF `presenter` field and `em_api_event_save` handler need to be updated separately to accept the new array shape (see `temp-client-prompt.txt`)
+- Only the active admin "Post Event" page and its script were changed - the disabled legacy front-end shortcode code was intentionally left untouched
+
+---
+
 ## [1.8.3] - 2026-08-29
 
 ### Changed

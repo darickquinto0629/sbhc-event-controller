@@ -65,7 +65,7 @@ class EC_Payload_Transformer {
 			'data_comms_consent'   => true,
 
 			// Custom ACF-mapped fields (will be picked up by em_api_event_save hook on remote site)
-			'presenter'            => $event_data['presenter'] ?? '',
+			'presenter'            => $event_data['presenter'] ?? array(),
 			'ticket_price'         => $event_data['ticket_price'] ?? '',
 			'event_location_type'  => $meta['event_location_type'] ?? $event_data['event_type'] ?? '',
 			'summary'              => $event_data['summary'] ?? '',
