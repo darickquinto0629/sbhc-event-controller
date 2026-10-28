@@ -131,7 +131,11 @@ class EC_Delivery_Worker {
 		if ( $job['media_path'] && empty( $site_job['remote_media_id'] ) ) {
 			$repository->mark_status( $site_job_id, 'processing', array( 'phase' => 'media' ) );
 
-			$media_result = $api_client->upload_media( $credentials, $job['media_path'] );
+			$media_result = $api_client->upload_media(
+				$credentials,
+				$job['media_path'],
+				isset( $event_data['featured_image_alt'] ) ? (string) $event_data['featured_image_alt'] : ''
+			);
 
 			if ( is_wp_error( $media_result ) ) {
 				$this->handle_failure( $job_manager, $repository, $site_job, $media_result, 'media' );

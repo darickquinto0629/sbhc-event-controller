@@ -33,6 +33,12 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 
 		<div class="col-md-12 mb-3">
+		  <label for="featured_image_alt" class="form-label">Featured Image Alternative Text</label>
+		  <input type="text" class="form-control" id="featured_image_alt" name="featured_image_alt" value="" required>
+		  <div class="invalid-feedback">Please enter alternative text describing the featured image.</div>
+		</div>
+
+		<div class="col-md-12 mb-3">
 		  <label for="EventTitle" class="">Event Title</label>
 		  <input type="text" class="form-control" value="" name="event_title" required>
 		  <div class="invalid-feedback">Please enter a title for the event.</div>
@@ -248,22 +254,49 @@ if ( ! defined( 'WPINC' ) ) {
 				<div class="col-mb-12">
 					<?php
 						if ( have_rows( 'site_details', 'option' ) ) :
-							$site_names = array();
+							$sites = array();
 							while ( have_rows( 'site_details', 'option' ) ) :
 								the_row();
-								$site_names[] = get_sub_field( 'site_name' );
+								$facility_type = get_sub_field( 'facility_type' );
+								if ( is_array( $facility_type ) ) {
+									$facility_type = isset( $facility_type['value'] ) ? $facility_type['value'] : reset( $facility_type );
+								}
+								$sites[] = array(
+									'name'     => get_sub_field( 'site_name' ),
+									'facility' => $facility_type ? (string) $facility_type : 'Others',
+								);
 							endwhile;
-							sort( $site_names, SORT_NATURAL | SORT_FLAG_CASE );
-							foreach ( $site_names as $name ) :
+							usort(
+								$sites,
+								function ( $a, $b ) {
+									return strnatcasecmp( $a['name'], $b['name'] );
+								}
+							);
 					?>
-								<div class="form-check">
-								  <input class="form-check-input" type="checkbox" value="" id="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?>">
-								  <label class="form-check-label" for="<?php echo esc_attr( strtolower( str_replace( ' ', '_', $name ) ) ); ?>">
-									<?php echo esc_html( $name ); ?>
+							<div class="mb-3">
+								<label for="facility_type_filter" class="form-label">Filter sites by facility type</label>
+								<select id="facility_type_filter" class="form-select">
+									<option value="">All</option>
+									<option value="SUD">SUD</option>
+									<option value="ACUTE">ACUTE</option>
+									<option value="Others">Others</option>
+								</select>
+							</div>
+							<ul class="list-unstyled ps-2 ec-site-list">
+					<?php foreach ( $sites as $site ) :
+								$site_id = strtolower( str_replace( ' ', '_', $site['name'] ) );
+					?>
+								<li class="form-check ec-site-item" data-facility-type="<?php echo esc_attr( $site['facility'] ); ?>">
+								  <input class="form-check-input" type="checkbox" value="" id="<?php echo esc_attr( $site_id ); ?>">
+								  <label class="form-check-label" for="<?php echo esc_attr( $site_id ); ?>">
+									<?php echo esc_html( $site['name'] ); ?>
 								  </label>
-								</div>
+								</li>
 					<?php
 							endforeach;
+					?>
+							</ul>
+					<?php
 						else: 
 							echo '<p class="text-danger">Please add the client sites where events should be sent.</p>';
 						endif;

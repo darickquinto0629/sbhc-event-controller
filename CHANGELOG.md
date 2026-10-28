@@ -2,6 +2,32 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.9.1] - 2026-10-28
+
+### Added
+
+#### **Facility Type Filter on the Post Event Site List**
+
+- A "Filter sites by facility type" dropdown (All, SUD, ACUTE, Others) now appears above the client site checkboxes on the Post Event form
+- Each site's type comes from a new `facility_type` sub-field in the `site_details` ACF repeater; sites with no type are treated as "Others"
+- Choosing a type hides the sites that don't match; ticked sites stay ticked while hidden and are still submitted
+
+#### **Featured Image Alternative Text**
+
+- A required "Featured Image Alternative Text" field now appears directly below the featured image upload on the Post Event form
+- The value is sent to each remote site as `alt_text` on the media upload, so the attachment's `_wp_attachment_image_alt` is set, and as `featured_image_alt` on the event payload
+
+### Changed
+
+#### **Site List Layout**
+
+- The site checkboxes are now rendered as a list (`ul`/`li`) instead of separate `div`s
+- On tablet and desktop the list uses 1 column for 3 or fewer visible sites, 2 columns for 4-8, and 3 columns for 9 or more, based on the sites left after filtering; on mobile it is always 1 column
+- The columns use a CSS multi-column layout, so the alphabetical order now reads vertically (down the first column, then continuing at the top of the next) instead of horizontally across columns
+- No impact on submission data or site matching logic
+
+---
+
 ## [1.9.0] - 2026-09-16
 
 ### Changed

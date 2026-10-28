@@ -188,6 +188,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
 
       return {
         "event_title": $('input[name="event_title"]').val(),
+        "featured_image_alt": $('input[name="featured_image_alt"]').val() || '',
         "presenter": presenters,
         "ticket_price": $('input[name="ticketprice"]').val(),
         "event_type": eventLocationType,
@@ -282,6 +283,7 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
 
       const requiredFields = [
         'event_title',
+        'featured_image_alt',
         'startdate',
         'enddate',
         'starttime',
@@ -346,6 +348,27 @@ let isSubmitting = false; // Flag to prevent duplicate submissions
         }
       });
     });
+
+    // Filter the site checkboxes by facility type (visibility only; checked state is kept)
+    // and set the column count from the number of visible sites: <=3 = 1, 4-8 = 2, 9+ = 3.
+    // The list uses CSS multi-columns so the alphabetical order reads top-to-bottom.
+    function applySiteFilter() {
+      const type = $('#facility_type_filter').val();
+      const $items = $('.ec-site-item');
+      let visible = 0;
+      $items.each(function() {
+        const show = !type || $(this).data('facility-type') === type;
+        $(this).toggle(show);
+        if (show) visible++;
+      });
+      const colClass = visible <= 3 ? 'ec-site-list-1' : (visible < 9 ? 'ec-site-list-2' : 'ec-site-list-3');
+      $('.ec-site-list')
+        .removeClass('ec-site-list-1 ec-site-list-2 ec-site-list-3')
+        .addClass(colClass);
+    }
+
+    $('#facility_type_filter').on('change', applySiteFilter);
+    applySiteFilter();
 
     // Helper: Initialize TinyMCE editor
     function initTinyMCEEditor(selector, config = {}) {

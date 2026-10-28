@@ -27,9 +27,10 @@ class EC_Events_API_Client {
 	 *
 	 * @param array  $credentials [ 'url', 'username', 'password' ]
 	 * @param string $file_path   Absolute path to the file (see EC_Job_Manager::persist_media()).
+	 * @param string $alt_text    Alt text stored on the remote attachment (_wp_attachment_image_alt).
 	 * @return array|WP_Error Decoded response (contains 'id') on success.
 	 */
-	public function upload_media( array $credentials, $file_path ) {
+	public function upload_media( array $credentials, $file_path, $alt_text = '' ) {
 		if ( ! file_exists( $file_path ) ) {
 			return new WP_Error( 'media_file_missing', 'Persisted media file not found: ' . $file_path );
 		}
@@ -41,7 +42,7 @@ class EC_Events_API_Client {
 		}
 
 		$boundary = wp_generate_password( 24 );
-		$body     = $this->build_multipart_body( $file_path, $boundary );
+		$body     = $this->build_multipart_body( $file_path, $boundary, $alt_text );
 
 		$response = wp_remote_post(
 			$upload_url,
@@ -94,15 +95,24 @@ class EC_Events_API_Client {
 	/**
 	 * @param string $file_path
 	 * @param string $boundary
+	 * @param string $alt_text Optional alt text sent alongside the file.
 	 * @return string
 	 */
-	private function build_multipart_body( $file_path, $boundary ) {
+	private function build_multipart_body( $file_path, $boundary, $alt_text = '' ) {
 		$file_content = file_get_contents( $file_path );
 		$file_name    = basename( $file_path );
 		$filetype     = wp_check_filetype( $file_name );
 		$mime_type    = $filetype['type'] ? $filetype['type'] : 'application/octet-stream';
 
-		$body  = '--' . $boundary . "\r\n";
+		$body = '';
+
+		if ( '' !== (string) $alt_text ) {
+			$body .= '--' . $boundary . "\r\n";
+			$body .= 'Content-Disposition: form-data; name="alt_text"' . "\r\n\r\n";
+			$body .= $alt_text . "\r\n";
+		}
+
+		$body .= '--' . $boundary . "\r\n";
 		$body .= 'Content-Disposition: form-data; name="file"; filename="' . $file_name . "\"\r\n";
 		$body .= 'Content-Type: ' . $mime_type . "\r\n\r\n";
 		$body .= $file_content . "\r\n";

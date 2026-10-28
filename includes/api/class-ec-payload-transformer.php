@@ -54,6 +54,7 @@ class EC_Payload_Transformer {
 			'event_active_status'  => 1,
 			'event_private'        => 0,
 			'featured_image'       => $event_data['featured_media'] ?? 0,
+			'featured_image_alt'   => $event_data['featured_image_alt'] ?? '',
 			'location_id'          => 0,
 			'location_region'      => '',
 			'location_latitude'    => 0,

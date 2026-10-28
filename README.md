@@ -2,7 +2,7 @@
 
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)
 ![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue)
-![Version](https://img.shields.io/badge/version-1.9.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.9.1-brightgreen)
 
 Centralize event management and reliably syndicate events to dozens of remote WordPress sites through a durable, retry-aware background job queue.
 
@@ -128,7 +128,7 @@ Event submission is done from the WordPress admin, not a front-end page.
 
 1. In wp-admin, go to **Event Controller > Post Event**
 2. **Select Website(s):** Check which remote sites to publish to
-3. **Upload Featured Image:** Add a featured image for the event (optional)
+3. **Upload Featured Image:** Add a featured image for the event (required), plus the alternative text describing it (required - stored as the image's alt text on each remote site)
 4. **Fill Event Details:** Complete all required fields:
    - Event Title (required)
    - Start Date & Time (required)
@@ -259,6 +259,7 @@ Events are submitted to remote sites with the following structure:
     'event_type'          => 'single',         // Event type
     'post_status'         => 'publish',        // Always publish
     'featured_image'      => integer,          // Media ID on remote site
+    'featured_image_alt'  => string,           // Alt text for the featured image
 
     // Custom ACF fields
     'summary'             => string,

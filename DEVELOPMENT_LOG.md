@@ -2,6 +2,20 @@
 
 Technical documentation of fixes, architecture decisions, and debugging context.
 
+## Version 1.9.1: Facility Type Filter and Responsive Columns on the Site List (2026-10-28)
+
+**Change:** On the admin Post Event form, the client site checkboxes can now be filtered by facility type, and they are laid out in a responsive list.
+
+**Implementation:**
+- `admin/partials/event-controller-admin-post-event.php`: the `site_details` ACF loop now reads each site's `site_name` and `facility_type` into an array (sites without a type default to `Others`), sorts it by name with `strnatcasecmp` (same natural, case-insensitive order as before), and renders a "Filter sites by facility type" dropdown (All, SUD, ACUTE, Others) followed by a `ul.list-unstyled.row.g-0`. Each site is an `li.col-12.form-check.ec-site-item` carrying a `data-facility-type` attribute. The checkbox `id` is still `strtolower( str_replace( ' ', '_', $name ) )`.
+- `admin/partials/event-controller-admin-form-script.php`: `applySiteFilter()` shows or hides `.ec-site-item` rows to match the dropdown, counts the visible rows, and sets `col-md-12` (3 or fewer), `col-md-6` (4 to 8) or `col-md-4` (9 or more) on them. It runs on dropdown change and once on page load. On mobile the rows stay `col-12` (1 column).
+
+**Impact on Submission:** No impact. The filter only changes `display` on the rows, so ticked checkboxes stay ticked while hidden. `collectSelectedSites()` still reads `.form-check input[type="checkbox"]:checked` and sends the checkbox `id`s as `selected_sites`, which `EC_Site_Registry::derive_site_key()` matches the same way as before. `facility_type` is used only in the browser and is not sent to the backend.
+
+**Notes:** Only the admin Post Event form was changed; the disabled public shortcode form was left untouched. The `facility_type` sub-field must exist in the `site_details` repeater, and its stored values must be `SUD`, `ACUTE` or `Others` for the filter to match.
+
+---
+
 ## Version 1.8.3: Site Checkboxes Sorted Alphabetically (2026-08-29)
 
 **Change:** In `admin/partials/event-controller-admin-post-event.php`, the client site checkboxes now display in alphabetical order (case-insensitive, natural sort).
