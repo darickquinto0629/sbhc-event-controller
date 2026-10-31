@@ -2,6 +2,27 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.9.3] - 2026-11-01
+
+### Added
+
+#### **Delete Jobs from the Jobs List**
+
+- Each finished job (completed, completed with errors, failed, cancelled) on **Event Controller > Jobs** now has a checkbox; tick jobs and click **Delete selected** to remove them. Queued/processing jobs can't be selected
+- **Clear all jobs** deletes every job; jobs still queued or processing are cancelled first (pending background actions are unscheduled)
+- Deleting a job also removes its `ec_site_jobs` rows, its `ec_job_log` entries and its private featured image copy in `uploads/ec-private/`. Events already posted to client sites are not touched
+- The Jobs list is now paginated (20 per page) instead of showing only the 20 most recent jobs
+
+#### **Automatic Featured Image Cleanup**
+
+- The private copy of a job's featured image is deleted as soon as the job is `completed` (every site succeeded). Jobs with failed sites keep it so **Retry failed sites** can still upload it
+
+### Fixed
+
+- `ec_jobs.status` was `VARCHAR(20)`, too short for `completed_with_errors`, so a job where some sites failed and others succeeded stayed at `processing` forever. The column is now `VARCHAR(30)` (DB schema 1.2.0), and on upgrade existing stuck jobs are recalculated to their real final status
+
+---
+
 ## [1.9.2] - 2026-11-01
 
 ### Added

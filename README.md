@@ -167,12 +167,16 @@ Event submission is done from the WordPress admin, not a front-end page.
 
 ### Monitoring Jobs
 
-Go to **Event Controller > Jobs** to see recent submissions, or open a specific job to see:
+Go to **Event Controller > Jobs** to see all submissions (20 per page, newest first), or open a specific job to see:
 
 - Overall progress bar and succeeded/processing/retrying/failed counts
 - A per-site table with status, attempt count, remote event ID, next retry time, and error detail
 - **Retry failed sites** - re-queues only the sites that failed
 - **Cancel job** - stops any sites still in progress
+
+To keep the list short, tick finished jobs (completed, completed with errors, failed, cancelled) and click **Delete selected**, or click **Clear all jobs** to delete every job (any still queued or processing are cancelled first). Deleting a job removes its per-site rows, its log entries and its private featured image copy. Events already posted to client sites are not affected.
+
+The featured image uploaded with an event is kept in `wp-content/uploads/ec-private/` only while it may still be needed: it is removed automatically once every site succeeds, and otherwise when the job is deleted.
 
 ### Legacy Shortcode
 

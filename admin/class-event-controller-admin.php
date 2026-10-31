@@ -112,6 +112,43 @@ class Event_Controller_Admin {
 	}
 
 	/**
+	 * admin-post.php handler for the Jobs list "Delete selected" and
+	 * "Clear all jobs" buttons. Redirects back to the list with a notice.
+	 *
+	 * @since 1.9.3
+	 */
+	public function handle_delete_jobs() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You are not allowed to delete jobs.', 'event-controller' ), 403 );
+		}
+
+		check_admin_referer( 'ec_delete_jobs' );
+
+		$job_manager = new EC_Job_Manager();
+
+		if ( isset( $_POST['ec_clear_all'] ) ) {
+			$deleted = $job_manager->delete_all_jobs();
+		} else {
+			$job_ids = isset( $_POST['job_ids'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['job_ids'] ) ) : array();
+			$deleted = $job_manager->delete_jobs( $job_ids );
+		}
+
+		$paged = isset( $_POST['paged'] ) ? max( 1, absint( $_POST['paged'] ) ) : 1;
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'       => 'event-controller-jobs',
+					'paged'      => $paged,
+					'ec_deleted' => $deleted,
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
 	 * @since 1.7.0
 	 */
 	public function print_post_event_script() {

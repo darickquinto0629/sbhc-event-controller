@@ -13,7 +13,7 @@
 class EC_Schema {
 
 	const DB_VERSION_OPTION = 'ec_db_version';
-	const DB_VERSION        = '1.1.0';
+	const DB_VERSION        = '1.2.0';
 
 	/**
 	 * Create (or upgrade) the ec_jobs and ec_site_jobs tables.
@@ -30,7 +30,7 @@ class EC_Schema {
 		$sql_jobs = "CREATE TABLE {$jobs_table} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			idempotency_key CHAR(64) NOT NULL,
-			status VARCHAR(20) NOT NULL DEFAULT 'queued',
+			status VARCHAR(30) NOT NULL DEFAULT 'queued',
 			created_by BIGINT UNSIGNED NOT NULL,
 			event_title VARCHAR(255) NOT NULL DEFAULT '',
 			event_payload LONGTEXT NOT NULL,
@@ -102,8 +102,41 @@ class EC_Schema {
 	 * Covers cases where activation didn't fire (e.g. network-activated multisite).
 	 */
 	public static function maybe_upgrade() {
-		if ( get_option( self::DB_VERSION_OPTION ) !== self::DB_VERSION ) {
+		$installed_version = get_option( self::DB_VERSION_OPTION );
+
+		if ( $installed_version !== self::DB_VERSION ) {
 			self::install();
+
+			// Before 1.2.0, ec_jobs.status was VARCHAR(20), too short for
+			// 'completed_with_errors', so those jobs were stuck at 'processing'.
+			if ( $installed_version && version_compare( $installed_version, '1.2.0', '<' ) ) {
+				self::repair_stuck_jobs();
+			}
+		}
+	}
+
+	/**
+	 * Re-run the status rollup for jobs still marked queued/processing whose
+	 * site jobs are all terminal.
+	 */
+	private static function repair_stuck_jobs() {
+		global $wpdb;
+
+		$jobs_table      = $wpdb->prefix . 'ec_jobs';
+		$site_jobs_table = $wpdb->prefix . 'ec_site_jobs';
+
+		$job_ids = $wpdb->get_col(
+			"SELECT j.id FROM {$jobs_table} j
+			WHERE j.status IN ('queued', 'processing')
+			AND NOT EXISTS (
+				SELECT 1 FROM {$site_jobs_table} s
+				WHERE s.job_id = j.id AND s.status NOT IN ('complete', 'failed', 'cancelled')
+			)"
+		);
+
+		$job_manager = new EC_Job_Manager();
+		foreach ( $job_ids as $job_id ) {
+			$job_manager->rollup_job_counters( (int) $job_id );
 		}
 	}
 

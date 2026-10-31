@@ -16,6 +16,9 @@
 
 class EC_Job_Manager {
 
+	/** Job statuses with nothing left to deliver (see rollup_job_counters() and cancel_job()). */
+	const FINISHED_STATUSES = array( 'completed', 'completed_with_errors', 'failed', 'cancelled' );
+
 	/** @var string */
 	private $jobs_table;
 
@@ -192,6 +195,15 @@ class EC_Job_Manager {
 		}
 
 		$wpdb->update( $this->jobs_table, $fields, array( 'id' => $job_id ) );
+
+		// Every site has the image now, and a fully completed job has no failed
+		// sites left to retry, so the private copy is no longer needed.
+		if ( 'completed' === $fields['status'] ) {
+			$job = $this->get_raw_job( $job_id );
+			if ( $job ) {
+				$this->delete_media( $job['media_path'] );
+			}
+		}
 	}
 
 	/**
@@ -214,16 +226,18 @@ class EC_Job_Manager {
 	 * Recent jobs for the admin job-list screen (Phase 5).
 	 *
 	 * @param int $limit
+	 * @param int $offset
 	 * @return array
 	 */
-	public function list_jobs( $limit = 20 ) {
+	public function list_jobs( $limit = 20, $offset = 0 ) {
 		global $wpdb;
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT id, event_title, status, total_sites, succeeded_count, failed_count, created_at, completed_at
-				FROM {$this->jobs_table} ORDER BY created_at DESC LIMIT %d",
-				$limit
+				FROM {$this->jobs_table} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d",
+				$limit,
+				$offset
 			),
 			ARRAY_A
 		);
@@ -240,6 +254,137 @@ class EC_Job_Manager {
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * Total number of jobs, for the admin job-list pagination.
+	 *
+	 * @return int
+	 */
+	public function count_jobs() {
+		global $wpdb;
+
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->jobs_table}" );
+	}
+
+	/**
+	 * Whether a job status is terminal (nothing left to deliver).
+	 *
+	 * @param string $status
+	 * @return bool
+	 */
+	public static function is_finished_status( $status ) {
+		return in_array( $status, self::FINISHED_STATUSES, true );
+	}
+
+	/**
+	 * Permanently delete the given jobs (the "Delete selected" admin action).
+	 * Only finished jobs are deleted; any queued/processing job in the list is
+	 * skipped so a delivery in progress is never pulled out from under the worker.
+	 *
+	 * @param int[] $job_ids
+	 * @return int Number of jobs deleted.
+	 */
+	public function delete_jobs( array $job_ids ) {
+		global $wpdb;
+
+		$job_ids = array_values( array_filter( array_unique( array_map( 'absint', $job_ids ) ) ) );
+		if ( empty( $job_ids ) ) {
+			return 0;
+		}
+
+		$placeholders = implode( ',', array_fill( 0, count( $job_ids ), '%d' ) );
+		$rows         = $wpdb->get_results(
+			$wpdb->prepare( "SELECT id, status, media_path FROM {$this->jobs_table} WHERE id IN ({$placeholders})", $job_ids ),
+			ARRAY_A
+		);
+
+		return $this->purge_jobs( $rows, true );
+	}
+
+	/**
+	 * Permanently delete every job (the "Clear all jobs" admin action).
+	 * Jobs still queued/processing are cancelled first, which unschedules
+	 * their pending Action Scheduler actions, then deleted like the rest.
+	 *
+	 * @return int Number of jobs deleted.
+	 */
+	public function delete_all_jobs() {
+		global $wpdb;
+
+		$rows = $wpdb->get_results( "SELECT id, status, media_path FROM {$this->jobs_table}", ARRAY_A );
+
+		return $this->purge_jobs( $rows, false );
+	}
+
+	/**
+	 * Delete jobs along with their site jobs, log entries and private media.
+	 *
+	 * @param array $rows          ec_jobs rows (id, status, media_path).
+	 * @param bool  $finished_only Skip jobs that are not finished instead of cancelling them.
+	 * @return int Number of jobs deleted.
+	 */
+	private function purge_jobs( array $rows, $finished_only ) {
+		global $wpdb;
+
+		$log_table = $wpdb->prefix . 'ec_job_log';
+		$deleted   = 0;
+
+		foreach ( $rows as $row ) {
+			$job_id = (int) $row['id'];
+
+			if ( ! self::is_finished_status( $row['status'] ) ) {
+				if ( $finished_only ) {
+					continue;
+				}
+				$this->cancel_job( $job_id );
+			}
+
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$log_table} WHERE job_id = %d OR site_job_id IN (SELECT id FROM {$this->site_jobs_table} WHERE job_id = %d)",
+					$job_id,
+					$job_id
+				)
+			);
+			$wpdb->delete( $this->site_jobs_table, array( 'job_id' => $job_id ), array( '%d' ) );
+
+			if ( $wpdb->delete( $this->jobs_table, array( 'id' => $job_id ), array( '%d' ) ) ) {
+				$deleted++;
+			}
+
+			$this->delete_media( $row['media_path'] );
+		}
+
+		return $deleted;
+	}
+
+	/**
+	 * Remove a job's persisted featured image and its per-job directory
+	 * (see persist_media()). Only ever touches uploads/ec-private/{key}/.
+	 *
+	 * @param string|null $media_path
+	 */
+	private function delete_media( $media_path ) {
+		if ( empty( $media_path ) ) {
+			return;
+		}
+
+		$upload_dir = wp_upload_dir();
+		$base_dir   = wp_normalize_path( trailingslashit( $upload_dir['basedir'] ) . 'ec-private' );
+		$job_dir    = wp_normalize_path( dirname( $media_path ) );
+
+		if ( dirname( $job_dir ) !== $base_dir || ! is_dir( $job_dir ) ) {
+			return;
+		}
+
+		foreach ( (array) glob( $job_dir . '/*' ) as $file ) {
+			if ( is_file( $file ) ) {
+				wp_delete_file( $file );
+			}
+		}
+
+		@rmdir( $job_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 	}
 
 	/**
