@@ -2,6 +2,19 @@
 
 All notable changes to Event Controller will be documented in this file.
 
+## [1.9.2] - 2026-11-01
+
+### Added
+
+#### **Automatic Updates from GitHub**
+
+- Bundled the [Plugin Update Checker](https://github.com/YahnisElsts/plugin-update-checker) v5.7 library in `includes/plugin-update-checker/`
+- `event-controller.php` now checks GitHub releases of `darickquinto0629/sbhc-event-controller` for new versions, so updates show on the WordPress Plugins screen and can be installed with one click or WordPress auto-updates, with no manual upload/reinstall
+- Optional `EVENT_CONTROLLER_GITHUB_TOKEN` constant (set in `wp-config.php`) for authenticating against a private repository
+- `Update URI` header so WordPress.org can never offer an unrelated plugin as an update for this one
+
+---
+
 ## [1.9.1] - 2026-10-28
 
 ### Added

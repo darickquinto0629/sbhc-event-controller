@@ -77,6 +77,32 @@ cd /path/to/wordpress/wp-content/plugins
 # Place the event-controller folder here
 ```
 
+The plugin folder must be named `event-controller` so automatic updates install into the right place.
+
+## Automatic Updates from GitHub
+
+From version 1.9.2 the plugin checks this repository for new versions using the bundled [Plugin Update Checker](https://github.com/YahnisElsts/plugin-update-checker) library (`includes/plugin-update-checker/`). Updates appear on the WordPress **Plugins** and **Dashboard → Updates** screens like any other plugin, and can be applied with one click or by WordPress auto-updates ("Enable auto-updates" link on the Plugins screen).
+
+Sites running 1.9.1 or older must be updated manually once to 1.9.2; after that, updates arrive automatically.
+
+### Publishing a new version
+
+1. Bump the version in **both** places in `event-controller.php`: the `Version:` header and `EVENT_CONTROLLER_VERSION`
+2. Update `CHANGELOG.md`, commit, and push to `main`
+3. Create a GitHub release whose tag matches the version (e.g. `v1.9.2` or `1.9.2`). Do not mark it as a pre-release or draft; those are ignored
+
+Until the first release exists, sites fall back to the version on the `main` branch, so avoid pushing a version bump to `main` before you intend to release it.
+
+WordPress checks for updates about every 12 hours. To check immediately on a site, click **Check for updates** under the plugin on the Plugins screen.
+
+### Private repository (optional)
+
+If the repository is private, add a read-only GitHub token to the site's `wp-config.php`:
+
+```php
+define( 'EVENT_CONTROLLER_GITHUB_TOKEN', 'github_pat_xxx' );
+```
+
 ## Configuration
 
 ### Setup Remote Sites
@@ -348,6 +374,7 @@ event-controller/
 │   ├── retry/               # EC_Error_Classifier, EC_Retry_Policy, EC_Circuit_Breaker, EC_Reconciler
 │   ├── rest/                # EC_REST_Controller
 │   ├── vendor/action-scheduler/  # Bundled Action Scheduler (standalone, no Composer needed at runtime)
+│   ├── plugin-update-checker/    # Bundled Plugin Update Checker (automatic updates from GitHub releases)
 │   ├── class-ec-logger.php
 │   ├── class-ec-site-registry.php
 │   └── class-event-controller-form-handler.php  # Legacy AJAX handler, kept dormant as a rollback path
